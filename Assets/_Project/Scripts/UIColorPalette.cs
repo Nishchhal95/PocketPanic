@@ -1,5 +1,6 @@
 using UnityEngine;
 
+//TODO: Make it dynamic!!
 public class UIColorPalette : MonoBehaviour
 {
     public static UIColorPalette Instance { get; private set; }

@@ -85,7 +85,6 @@ public class MainMenuCanvasController : MonoBehaviour
         hostButton.interactable = enable;
         findGameButton.interactable = enable;
         roomCodeInputField.interactable = enable;
-        joinButton.interactable = enable;
         
         PhotonNetworkController.SetPlayerName(newValue);
     }
