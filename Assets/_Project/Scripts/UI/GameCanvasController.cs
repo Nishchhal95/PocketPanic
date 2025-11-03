@@ -2,15 +2,6 @@ using UnityEngine;
 
 public class GameCanvasController : MonoBehaviour
 {
-    // Start is called once before the first execution of Update after the MonoBehaviour is created
-    void Start()
-    {
-        
-    }
-
-    // Update is called once per frame
-    void Update()
-    {
-        
-    }
+    // 1 Player cannot Play alone and Max is 10
+    [field: SerializeField] public PlayerCountToSlots[] PlayerCountToSlotsArray { get; private set; } = new PlayerCountToSlots[9];
 }

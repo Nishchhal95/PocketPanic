@@ -18,6 +18,11 @@ public class MenuWindow : MonoBehaviour
     {
         closeButton.onClick.RemoveListener(Close);
     }
+    
+    protected virtual void OnClose()
+    {
+        
+    }
 
     public void Show()
     {
@@ -25,6 +30,13 @@ public class MenuWindow : MonoBehaviour
     }
 
     public void Close()
+    {
+        gameObject.SetActive(false);
+        OnMenuWindowClosed?.Invoke();
+        OnClose();
+    }
+    
+    public void CloseWithoutCallback()
     {
         gameObject.SetActive(false);
         OnMenuWindowClosed?.Invoke();

@@ -1,4 +1,3 @@
-using Photon.Realtime;
 using UnityEngine;
 
 public class UIController : MonoBehaviour
@@ -8,15 +7,15 @@ public class UIController : MonoBehaviour
     
     private void OnEnable()
     {
-        PhotonNetworkController.JoinedRoom += EnableGameUI;
+        GameEvents.OnGameStarted += EnableGameUI;
     }
 
     private void OnDisable()
     {
-        PhotonNetworkController.JoinedRoom -= EnableGameUI;
+        GameEvents.OnGameStarted -= EnableGameUI;
     }
 
-    private void EnableGameUI(RoomInfo _)
+    private void EnableGameUI()
     {
         menuCanvas.SetActive(false);
         gameCanvas.SetActive(true);

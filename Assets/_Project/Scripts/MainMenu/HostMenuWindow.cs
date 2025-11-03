@@ -6,6 +6,7 @@ public class HostMenuWindow : MenuWindow
 {
     [SerializeField] private TMP_InputField playerCountInputField;
     [SerializeField] private Button hostGameButton;
+    [SerializeField] private GameObject loading;
     
     protected override void OnEnable()
     {
@@ -54,5 +55,7 @@ public class HostMenuWindow : MenuWindow
         {
             PlayerCount = playerCount
         });
+        
+        loading.SetActive(true);
     }
 }

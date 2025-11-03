@@ -1,3 +1,4 @@
+using Photon.Realtime;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -16,6 +17,7 @@ public class MainMenuCanvasController : MonoBehaviour
     [SerializeField] private GameObject selfMenu;
     [SerializeField] private MenuWindow hostMenu;
     [SerializeField] private MenuWindow findGameMenu;
+    [SerializeField] private MenuWindow waitingForPlayersMenu;
 
     private void Awake()
     {
@@ -30,6 +32,7 @@ public class MainMenuCanvasController : MonoBehaviour
     {
         PhotonNetworkController.ConnectedToMaster += OnConnectedToMaster;
         MenuWindow.OnMenuWindowClosed += OnMenuWindowClosed;
+        PhotonNetworkController.JoinedRoom += OnPlayerJoinedRoom;
         
         playerNameInputField.onValueChanged.AddListener(OnPlayerNameInputFieldValueChanged);
         roomCodeInputField.onValueChanged.AddListener(OnRoomCodeInputFieldValueChanged);
@@ -43,8 +46,9 @@ public class MainMenuCanvasController : MonoBehaviour
     {
         PhotonNetworkController.ConnectedToMaster -= OnConnectedToMaster;
         MenuWindow.OnMenuWindowClosed -= OnMenuWindowClosed;
+        PhotonNetworkController.JoinedRoom -= OnPlayerJoinedRoom;
         
-        playerNameInputField.onValueChanged.AddListener(OnPlayerNameInputFieldValueChanged);
+        playerNameInputField.onValueChanged.RemoveListener(OnPlayerNameInputFieldValueChanged);
         roomCodeInputField.onValueChanged.RemoveListener(OnRoomCodeInputFieldValueChanged);
         
         hostButton.onClick.RemoveListener(OnHostButtonClicked);
@@ -63,6 +67,16 @@ public class MainMenuCanvasController : MonoBehaviour
     private void OnMenuWindowClosed()
     {
         selfMenu.SetActive(true);
+    }
+
+    private void OnPlayerJoinedRoom(RoomInfo _)
+    {
+        photonLoadingPanel.SetActive(false);
+        hostMenu.CloseWithoutCallback();
+        findGameMenu.CloseWithoutCallback();
+        
+        selfMenu.SetActive(false);
+        waitingForPlayersMenu.Show();
     }
     
     private void OnPlayerNameInputFieldValueChanged(string newValue)
