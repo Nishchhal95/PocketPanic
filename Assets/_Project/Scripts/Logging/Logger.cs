@@ -4,7 +4,7 @@ public static class Logger
 {
     private static bool needLogs = true;
     
-    private static Color LOG_COLOR = Color.blue;
+    private static Color LOG_COLOR = Color.green;
     private static Color ERROR_COLOR = Color.red;
     private static Color WARNING_COLOR = Color.yellow;
 

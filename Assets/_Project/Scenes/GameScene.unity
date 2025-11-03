@@ -265,11 +265,11 @@ RectTransform:
   m_Children: []
   m_Father: {fileID: 1866509986}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0.5, y: 0.5}
-  m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: 0, y: -800}
-  m_SizeDelta: {x: 100, y: 100}
-  m_Pivot: {x: 0.5, y: 0.5}
+  m_AnchorMin: {x: 0, y: 0}
+  m_AnchorMax: {x: 1, y: 0}
+  m_AnchoredPosition: {x: 0, y: 200}
+  m_SizeDelta: {x: 0, y: 100}
+  m_Pivot: {x: 0.5, y: 0}
 --- !u!1 &60048783
 GameObject:
   m_ObjectHideFlags: 0
@@ -1104,7 +1104,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!114 &289433136
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1163,7 +1163,7 @@ Canvas:
   m_OverridePixelPerfect: 0
   m_SortingBucketNormalizedSize: 0
   m_VertexColorAlwaysGammaSpace: 0
-  m_AdditionalShaderChannelsFlag: 0
+  m_AdditionalShaderChannelsFlag: 25
   m_UpdateRectTransformForStandalone: 0
   m_SortingLayerID: 0
   m_SortingOrder: 0
@@ -3689,7 +3689,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!114 &793185538
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -6621,6 +6621,8 @@ GameObject:
   m_Component:
   - component: {fileID: 1710755267}
   - component: {fileID: 1710755268}
+  - component: {fileID: 1710755270}
+  - component: {fileID: 1710755271}
   - component: {fileID: 1710755269}
   m_Layer: 0
   m_Name: GameController
@@ -6656,6 +6658,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 026d4308ca3fc864bb22d154ec932dd3, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::GameController
+  deckController: {fileID: 1710755270}
   gameCanvasController: {fileID: 289433140}
   localGamePlayerPrefab: {fileID: -6930792437761130591, guid: 4e945bacdcf6717498024ac07691eeed, type: 3}
   remoteGamePlayerPrefab: {fileID: 5539796763843933915, guid: 7238e7fcfe9111549abc5d98d95e60c1, type: 3}
@@ -6681,6 +6684,31 @@ MonoBehaviour:
   sceneViewId: 1
   InstantiationId: 0
   isRuntimeInstantiated: 0
+--- !u!114 &1710755270
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1710755266}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: cc2ceeac6e73ef04288da0f59d25cb31, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::DeckController
+  deckConfig: {fileID: 11400000, guid: d9137787fe36c5341a50528815c421c2, type: 2}
+--- !u!114 &1710755271
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1710755266}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5840d6c513a90a04e8941f681a1eb6d1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::CardDatabase
 --- !u!1 &1800789447
 GameObject:
   m_ObjectHideFlags: 0
@@ -7035,10 +7063,10 @@ RectTransform:
   - {fileID: 1455685578}
   m_Father: {fileID: 289433139}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0.5, y: 0.5}
-  m_AnchorMax: {x: 0.5, y: 0.5}
+  m_AnchorMin: {x: 0, y: 0}
+  m_AnchorMax: {x: 1, y: 1}
   m_AnchoredPosition: {x: 0, y: 0}
-  m_SizeDelta: {x: 100, y: 100}
+  m_SizeDelta: {x: 0, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!1 &1879015007
 GameObject:

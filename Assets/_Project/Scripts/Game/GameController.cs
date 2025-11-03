@@ -7,10 +7,14 @@ using UnityEngine;
 public class GameController : MonoBehaviourPun
 {
     public static GameController Instance { get; private set; }
-    
+
+    [SerializeField] private DeckController deckController;
     [SerializeField] private GameCanvasController gameCanvasController;
     [SerializeField] private GamePlayer localGamePlayerPrefab;
     [SerializeField] private GamePlayer remoteGamePlayerPrefab;
+
+    private Dictionary<int, Player> actorIdToPhotonPlayerMap = new();
+    private Dictionary<int, GamePlayer> actorIdToGamePlayerMap = new();
     
     private void Awake()
     {
@@ -24,14 +28,26 @@ public class GameController : MonoBehaviourPun
         DontDestroyOnLoad(gameObject);
     }
 
-    private void OnEnable()
+    private void Start()
     {
-        GameEvents.OnGameStarted += SetupGame;
+        TestCardsSpreadNoNetwork();
     }
 
-    private void OnDisable()
+    private void TestCardsSpreadNoNetwork()
     {
-        GameEvents.OnGameStarted -= SetupGame;
+        int numberOfCards = 10;
+        List<Transform> playerSlots = GetPlayerSlotsFromPlayerCount(2);
+        GamePlayer gamePlayer = Instantiate(localGamePlayerPrefab, playerSlots[0]);
+        gamePlayer.Init("Demo", 1, "DemoUserId");
+
+        deckController.BuildDeckWithoutExplodeAndDiffuse();
+        deckController.Shuffle(1);
+        List<CardType> cards = new List<CardType>(numberOfCards) { CardType.Defuse };
+        for (int j = 0; j < numberOfCards - 1; j++)
+        {
+            cards.Add(deckController.DrawCardTop());
+        }
+        gamePlayer.InitCards(cards, true);
     }
 
     #region NetworkCalls
@@ -44,7 +60,10 @@ public class GameController : MonoBehaviourPun
             return;
         }
         
-        photonView.RPC(nameof(GameStartedRPC), RpcTarget.All);
+        // Generate and Shuffle Deck for all players
+        int randomSeedInitial = UnityEngine.Random.Range(1, 99999);
+        int randomSeedFinal = UnityEngine.Random.Range(1, 99999);
+        photonView.RPC(nameof(GameStartedRPC), RpcTarget.All, randomSeedInitial, randomSeedFinal);
     }
 
     #endregion
@@ -52,17 +71,26 @@ public class GameController : MonoBehaviourPun
     #region RPCs
     
     [PunRPC]
-    private void GameStartedRPC()
+    private void GameStartedRPC(int seedInitial, int seedFinal)
     {
         GameEvents.RaiseGameStarted();
+        SetupGame(seedInitial, seedFinal);
     }
 
     #endregion
     
 
-    private void SetupGame()
+    private void SetupGame(int seedInitial, int seedFinal)
     {
+        deckController.BuildDeckWithoutExplodeAndDiffuse();
+        deckController.Shuffle(seedInitial);
+        
         SpawnPlayers();
+        DistributeCards();
+        
+        deckController.AddExplode(PhotonNetworkController.GetPlayerCountInCurrentRoom());
+        deckController.AddDefuse(2);
+        deckController.Shuffle(seedFinal);
     }
 
     private void SpawnPlayers()
@@ -81,6 +109,24 @@ public class GameController : MonoBehaviourPun
 
             GamePlayer gamePlayer = Instantiate(player.IsLocal ? localGamePlayerPrefab : remoteGamePlayerPrefab, playerSlot);
             gamePlayer.Init(player.NickName, player.ActorNumber, player.UserId);
+            
+            actorIdToPhotonPlayerMap.Add(player.ActorNumber, player);
+            actorIdToGamePlayerMap.Add(player.ActorNumber, gamePlayer);
+        }
+    }
+
+    private void DistributeCards()
+    {
+        Player[] players = PhotonNetworkController.GetPlayersCurrentRoom();
+
+        foreach (Player player in players)
+        {
+            List<CardType> cards = new List<CardType>(8) { CardType.Defuse };
+            for (int j = 0; j < 7; j++)
+            {
+                cards.Add(deckController.DrawCardTop());
+            }
+            actorIdToGamePlayerMap[player.ActorNumber].InitCards(cards, player.IsLocal);
         }
     }
 
