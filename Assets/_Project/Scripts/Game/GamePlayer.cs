@@ -214,6 +214,28 @@ public class GamePlayer : MonoBehaviour
         SelectCard(newCard);
     }
 
+    public CardType GetCard(int index)
+    {
+        return cards[index];
+    }
+    
+    public void RemoveCard(int index)
+    {
+        if (index == -1)
+        {
+            return;
+        }
+
+        cards.RemoveAt(index);
+
+        HandCardController handCardController = handCardControllers[index];
+        handCardController.OnClick -= OnCardClicked;
+        handCardControllers.RemoveAt(index);
+        Destroy(handCardController.gameObject);
+
+        UpdateHandLayout();
+    }
+
     public void RemoveCard(Guid cardInstanceLocal)
     {
         int index = handCardControllers.FindIndex(x => x.CardInstanceLocal == cardInstanceLocal);

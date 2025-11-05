@@ -89,6 +89,18 @@ public class DeckController : MonoBehaviour
         drawDeck.RemoveAt(drawDeck.Count - 1);
         return cardType;
     }
+    
+    public CardType PeekCardAtIndexFromTop(int index)
+    {
+        if (drawDeck.Count == 0)
+        {
+            Logger.Error("Deck is Empty");
+            return CardType.Nope;
+        }
+
+        CardType cardType = drawDeck[index];
+        return cardType;
+    }
 
     public void PlayCard(CardType cardType)
     {

@@ -109,6 +109,11 @@ public class GameController : MonoBehaviourPun
     {
         photonView.RPC(nameof(CardPickedVisualRPC), RpcTarget.All);
     }
+    
+    private void SendCardPickedVisualBottomToAll()
+    {
+        photonView.RPC(nameof(CardPickedVisualBottomRPC), RpcTarget.All);
+    }
 
     private void SendCardPlayerVisualToAll(int actorNumber, CardType cardType)
     {
@@ -123,6 +128,11 @@ public class GameController : MonoBehaviourPun
     private void SendForcePickCardsForCurrentTurn(int count)
     {
         photonView.RPC(nameof(ForcePickCardsForCurrentTurnRPC), RpcTarget.All, count);
+    }
+
+    private void SendTakeCardFromPlayerToAll(int actionActorNumber, int targetActorNumber, int cardIndex)
+    {
+        photonView.RPC(nameof(TakeCardsFromPlayerRPC), RpcTarget.All, actionActorNumber, targetActorNumber, cardIndex);
     }
 
     #endregion
@@ -159,6 +169,13 @@ public class GameController : MonoBehaviourPun
     }
     
     [PunRPC]
+    private void CardPickedVisualBottomRPC()
+    {
+        CardType cardType = deckController.DrawCardBottom();
+        GetGamePlayerForTurn(currentTurn).AddCard(cardType);
+    }
+    
+    [PunRPC]
     private void CardPlayedVisualRPC(int actorNumber, int cardType)
     {
         // Locally we remove card by Instance GUID
@@ -179,6 +196,15 @@ public class GameController : MonoBehaviourPun
     private void ForcePickCardsForCurrentTurnRPC(int count)
     {
         CurrentTurnPicksCards(count);
+    }
+    
+    [PunRPC]
+    private void TakeCardsFromPlayerRPC(int actionActorNumber, int targetActorNumber, int cardIndex)
+    {
+        CardType cardType = actorIdToGamePlayerMap[targetActorNumber].GetCard(cardIndex);
+        actorIdToGamePlayerMap[targetActorNumber].RemoveCard(cardIndex);
+        
+        actorIdToGamePlayerMap[actionActorNumber].AddCard(cardType);
     }
 
     #endregion
@@ -335,6 +361,29 @@ public class GameController : MonoBehaviourPun
     public void ShuffleCards(int randomShuffleSeed)
     {
         SendShuffleToAll(randomShuffleSeed);
+    }
+    
+    public void ShowPlayerTopCards(int cardCount)
+    {
+        for (int i = 0; i < cardCount; i++)
+        {
+            Logger.Log($"Player sees Card {deckController.PeekCardAtIndexFromTop(i)} at Pos {i + 1}");
+        }
+    }
+    
+    public void GetCardFromPlayer(int actionActorNumber, int targetActorNumber, int cardIndex)
+    {
+        // Wraps it so it starts from 1 till player count, NOT FROM 0
+        targetActorNumber = (targetActorNumber - 1) % currentRoomPlayers.Length + 1;
+
+        // User Selects 
+        SendTakeCardFromPlayerToAll(actionActorNumber, targetActorNumber, cardIndex);
+    }
+    
+    public void DrawFromBottomAndEndTurn()
+    {
+        SendCardPickedVisualBottomToAll();
+        SendEndTurnToAll();
     }
 
     #endregion
