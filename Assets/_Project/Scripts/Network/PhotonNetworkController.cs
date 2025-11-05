@@ -74,6 +74,11 @@ public class PhotonNetworkController : MonoBehaviourPunCallbacks
     {
         return PhotonNetwork.IsMasterClient;
     }
+
+    public static Player GetLocalPlayer()
+    {
+        return PhotonNetwork.LocalPlayer;
+    }
     
     // TODO: This always calls a LINQ on PlayerList so maybe we can cache it simply by adding a dirty flag if player entered or left room.
     public static Player[] GetPlayersCurrentRoom()

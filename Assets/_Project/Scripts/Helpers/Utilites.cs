@@ -25,4 +25,12 @@ public static class Utilites
         return finalCode;
     }
 
+    public static bool IsCatCard(CardType cardType)
+    {
+        return cardType is CardType.BeardCat or 
+            CardType.RainbowCat or 
+            CardType.TacoCat or 
+            CardType.WatermelonCat or
+            CardType.WildCat;
+    }
 }

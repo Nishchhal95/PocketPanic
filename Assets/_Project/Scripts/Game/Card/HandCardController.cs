@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using DG.Tweening;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
@@ -7,39 +9,77 @@ public class HandCardController : MonoBehaviour, IPointerEnterHandler, IPointerE
 {
     [SerializeField] private Image image;
     [field: SerializeField] public CardType CardType { get; private set; }
+    [field: SerializeField] public Guid CardInstanceLocal { get; private set; }
+    
+    [SerializeField] private float hoverMoveDistance = 100f;
+    [SerializeField] private Vector3 selectedScale = new(1.2f, 1.2f, 1.2f);
+    [SerializeField] private float tweenDuration = 0.25f;
 
-    public event Action<CardType> OnClick;
-    public event Action FAKEADD;
+    public event Action<Guid, CardType> OnClick;
+    
+    private RectTransform rectTransform;
+    private Vector2 originalPos;
+    private bool isSelected = false;
+    
+    private void Awake()
+    {
+        rectTransform = GetComponent<RectTransform>();
+    }
 
-    public void Init(CardType cardType, Sprite sprite)
+    public void Init(CardType cardType, Guid cardInstanceLocal, Sprite sprite)
     {
         CardType = cardType;
+        CardInstanceLocal = cardInstanceLocal;
         image.sprite = sprite;
     }
 
     public void OnPointerEnter(PointerEventData eventData)
-    {
-        image.transform.localScale = new Vector3(1.2f, 1.2f, 1.2f);
+    {       
+        if (isSelected)
+        {
+            return;
+        }
+        
+        rectTransform.DOKill(true);
+        rectTransform.localScale = Vector3.one;
+        rectTransform.DOScale(selectedScale, tweenDuration).SetEase(Ease.OutQuad);
     }
 
     public void OnPointerExit(PointerEventData eventData)
     {
-        image.transform.localScale = Vector3.one;
+        if (isSelected)
+        {
+            return;
+        }
+        
+        rectTransform.DOKill(true);
+        rectTransform.DOScale(Vector3.one, tweenDuration).SetEase(Ease.OutQuad);
     }
 
     public void OnPointerClick(PointerEventData eventData)
     {
-        switch (eventData.button)
-        {
-            case PointerEventData.InputButton.Left:
-                Logger.Log($"Player played {CardType} card");
-                OnClick?.Invoke(CardType);
-                break;
+        OnClick?.Invoke(CardInstanceLocal, CardType);
+    }
 
-            case PointerEventData.InputButton.Right:
-                Logger.Log($"Right-clicked on {CardType}");
-                FAKEADD?.Invoke();
-                break;
-        }
+    public void Select()
+    {
+        isSelected = true;
+        originalPos = rectTransform.anchoredPosition;
+        
+        rectTransform.DOKill(true);
+        DOTween.Sequence()
+            .Append(rectTransform.DOAnchorPos(originalPos + Vector2.up * hoverMoveDistance, tweenDuration)
+                .SetEase(Ease.OutQuad))
+            .Join(rectTransform.DOScale(selectedScale, tweenDuration)
+                .SetEase(Ease.OutQuad));
+    }
+
+    public void Deselect()
+    {
+        isSelected = false;
+        
+        rectTransform.DOKill(true);
+        DOTween.Sequence().Append(rectTransform.DOAnchorPos(originalPos, tweenDuration).SetEase(Ease.OutQuad))
+            .Join(rectTransform.DOScale(Vector3.one, tweenDuration).SetEase(Ease.OutQuad));
     }
 }

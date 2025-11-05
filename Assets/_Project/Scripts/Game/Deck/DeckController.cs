@@ -6,7 +6,7 @@ public class DeckController : MonoBehaviour
     [SerializeField] private DeckConfig deckConfig;
 
     private List<CardType> drawDeck = new();
-    private List<CardType> playedDeck = new();
+    private List<CardType> playedCardsDeck = new();
 
     public void BuildDeckWithoutExplodeAndDiffuse()
     {
@@ -92,6 +92,6 @@ public class DeckController : MonoBehaviour
 
     public void PlayCard(CardType cardType)
     {
-        playedDeck.Add(cardType);
+        playedCardsDeck.Add(cardType);
     }
 }
