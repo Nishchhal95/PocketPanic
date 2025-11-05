@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using Photon.Pun;
 using Photon.Realtime;
 using UnityEngine;
@@ -14,11 +15,12 @@ public class GameController : MonoBehaviourPun
     [SerializeField] private GamePlayer localGamePlayerPrefab;
     [SerializeField] private GamePlayer remoteGamePlayerPrefab;
 
-    // Turn Variable start from 1 so we can make Turn and ActorNumber as interchangable.
-    private int currentTurn = 0;
+    private int currentTurn = -1;
     
-    public bool IsMyTurn => PhotonNetworkController.GetLocalPlayer().ActorNumber == currentTurn;
+    public bool IsMyTurn => currentRoomPlayers[currentTurn].IsLocal;
 
+    // This is an ordered list by ActorNumber
+    private Player[] currentRoomPlayers => PhotonNetworkController.GetPlayersCurrentRoom();
     private Dictionary<int, Player> actorIdToPhotonPlayerMap = new();
     private Dictionary<int, GamePlayer> actorIdToGamePlayerMap = new();
     
@@ -137,20 +139,23 @@ public class GameController : MonoBehaviourPun
     [PunRPC]
     private void EndTurnRPC()
     {
-        SetCurrentTurn(currentTurn++);
+        currentTurn++;
+        SetCurrentTurn(currentTurn);
     }
     
     [PunRPC]
     private void SetTurnRPC(int turn)
     {
+        Logger.Log($"SetTurnRPC Start, Current Turn {currentTurn} and setting to {turn}");
         SetCurrentTurn(turn);
+        Logger.Log($"SetTurnRPC End, Current Turn {currentTurn}");
     }
     
     [PunRPC]
     private void CardPickedVisualRPC()
     {
         CardType cardType = deckController.DrawCardTop();
-        actorIdToGamePlayerMap[currentTurn].AddCard(cardType);
+        GetGamePlayerForTurn(currentTurn).AddCard(cardType);
     }
     
     [PunRPC]
@@ -180,6 +185,7 @@ public class GameController : MonoBehaviourPun
     
     private void SetupGame(int seedInitial, int seedFinal)
     {
+        
         deckController.BuildDeckWithoutExplodeAndDiffuse();
         deckController.Shuffle(seedInitial);
         
@@ -233,8 +239,8 @@ public class GameController : MonoBehaviourPun
     private void SetCurrentTurn(int value)
     {
         currentTurn = value;
-        currentTurn = (currentTurn % PhotonNetworkController.GetPlayerCountInCurrentRoom()) + 1;
-        gameCanvasController.UpdateTurn(actorIdToPhotonPlayerMap[currentTurn].NickName);
+        currentTurn %= PhotonNetworkController.GetPlayerCountInCurrentRoom();
+        gameCanvasController.UpdateTurn(GetPlayerForTurn(currentTurn).NickName);
     }
 
     private List<Transform> GetPlayerSlotsFromPlayerCount(int playerCount)
@@ -267,7 +273,7 @@ public class GameController : MonoBehaviourPun
         for (int i = 0; i < count; i++)
         {
             CardType cardType = deckController.DrawCardTop();
-            actorIdToGamePlayerMap[currentTurn].AddCard(cardType);
+            GetGamePlayerForTurn(currentTurn).AddCard(cardType);
 
             yield return new WaitForSecondsRealtime(1f);
         }
@@ -314,8 +320,16 @@ public class GameController : MonoBehaviourPun
 
     public void ForcePlayerTakeTwoTurn(int targetActor)
     {
-        SendSetTurnForAll(targetActor);
+        SetActorsTurn(targetActor);
         SendForcePickCardsForCurrentTurn(2);
+    }
+
+    private void SetActorsTurn(int targetActorNumber)
+    {
+        // Wraps it so it starts from 1 till player count, NOT FROM 0
+        targetActorNumber = (targetActorNumber - 1) % currentRoomPlayers.Length + 1;
+        int arrayIndex = currentRoomPlayers.ToList().FindIndex(p => p.ActorNumber == targetActorNumber);
+        SendSetTurnForAll(arrayIndex);
     }
     
     public void ShuffleCards(int randomShuffleSeed)
@@ -324,4 +338,17 @@ public class GameController : MonoBehaviourPun
     }
 
     #endregion
+
+    // Some Helper
+    private Player GetPlayerForTurn(int turn)
+    {
+        return currentRoomPlayers[turn];
+    }
+
+    private GamePlayer GetGamePlayerForTurn(int turn)
+    {
+        Player currentTurnPlayer = GetPlayerForTurn(turn);
+        int currentTurnPlayerActorNumber = currentTurnPlayer.ActorNumber;
+        return actorIdToGamePlayerMap[currentTurnPlayerActorNumber];
+    }
 }

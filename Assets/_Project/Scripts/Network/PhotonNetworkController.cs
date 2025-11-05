@@ -15,6 +15,7 @@ public class PhotonNetworkController : MonoBehaviourPunCallbacks
     public static event Action<Player> PlayerLeftRoom;
     public static event Action<Player> MasterClientSwitched;
 
+    private static Player[] CachedOrderedByActorNumberRoomPlayerArray;
     private static List<RoomInfo> CachedRoomList = new();
     private static List<string> CachedRoomNames = new();
     
@@ -83,7 +84,11 @@ public class PhotonNetworkController : MonoBehaviourPunCallbacks
     // TODO: This always calls a LINQ on PlayerList so maybe we can cache it simply by adding a dirty flag if player entered or left room.
     public static Player[] GetPlayersCurrentRoom()
     {
-        return PhotonNetwork.PlayerList;
+        if (CachedOrderedByActorNumberRoomPlayerArray == null || CachedOrderedByActorNumberRoomPlayerArray.Length == 0)
+        {
+            CachedOrderedByActorNumberRoomPlayerArray = PhotonNetwork.PlayerList;
+        }
+        return CachedOrderedByActorNumberRoomPlayerArray;
     }
 
     #endregion
@@ -130,6 +135,7 @@ public class PhotonNetworkController : MonoBehaviourPunCallbacks
     {
         base.OnPlayerEnteredRoom(newPlayer);
         Logger.Log($"Photon: Player {newPlayer.NickName} Entered Room {PhotonNetwork.CurrentRoom.Name}");
+        CachedOrderedByActorNumberRoomPlayerArray = PhotonNetwork.PlayerList;
         PlayerEnteredRoom?.Invoke(newPlayer);
     }
 
@@ -137,6 +143,7 @@ public class PhotonNetworkController : MonoBehaviourPunCallbacks
     {
         base.OnPlayerLeftRoom(otherPlayer);
         Logger.Log($"Photon: Player {otherPlayer.NickName} Entered Room {PhotonNetwork.CurrentRoom.Name}");
+        CachedOrderedByActorNumberRoomPlayerArray = PhotonNetwork.PlayerList;
         PlayerLeftRoom?.Invoke(otherPlayer);
     }
 
