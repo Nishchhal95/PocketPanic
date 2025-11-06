@@ -52,7 +52,7 @@ public class TargetAttackAction : CardAction
     public override void Execute(int actorNumber, int targetActorNumber = -1)
     {
         Logger.Log($"Player {actorNumber} played TARGET ATTACK!");
-        GameController.Instance.ForcePlayerTakeTwoTurn(actorNumber + 1);
+        GameController.Instance.ForcePlayerTakeTwoTurn(targetActorNumber);
     }
 }
 
