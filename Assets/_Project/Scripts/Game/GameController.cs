@@ -22,6 +22,10 @@ public class GameController : MonoBehaviourPun
 
     public TurnManager TurnManager { get; private set; }
     [field: SerializeField] public NetworkManager NetworkManager { get; private set; }
+
+    private GamePlayer testPlayer;
+    [SerializeField] private CardType testAddCardType;
+    [SerializeField] private CardType testRemoveCardType;
     
     private void Awake()
     {
@@ -84,8 +88,8 @@ public class GameController : MonoBehaviourPun
     {
         int numberOfCards = 10;
         List<Transform> playerSlots = GetPlayerSlotsFromPlayerCount(2);
-        GamePlayer gamePlayer = Instantiate(localGamePlayerPrefab, playerSlots[0]);
-        gamePlayer.Init("Demo", 1, "DemoUserId");
+        testPlayer = Instantiate(localGamePlayerPrefab, playerSlots[0]);
+        testPlayer.Init("Demo", 1, "DemoUserId", true);
 
         deckController.BuildDeckWithoutExplodeAndDiffuse();
         deckController.Shuffle(1);
@@ -105,7 +109,17 @@ public class GameController : MonoBehaviourPun
         // {
         //     cards.Add(deckController.DrawCardTop());
         // }
-        gamePlayer.InitCards(cards, true);
+        testPlayer.InitCards(cards);
+    }
+
+    public void TestAdd()
+    {
+        testPlayer.AddCard(testAddCardType);
+    }
+
+    public void TestRemove()
+    {
+        testPlayer.RemoveCard(testRemoveCardType);
     }
 
     public void StartGameNetworked()
@@ -328,7 +342,7 @@ public class GameController : MonoBehaviourPun
             Transform playerSlot = playerSlots[i];
 
             GamePlayer gamePlayer = Instantiate(player.IsLocal ? localGamePlayerPrefab : remoteGamePlayerPrefab, playerSlot);
-            gamePlayer.Init(player.NickName, player.ActorNumber, player.UserId);
+            gamePlayer.Init(player.NickName, player.ActorNumber, player.UserId, player.IsLocal);
             
             actorIdToPhotonPlayerMap.Add(player.ActorNumber, player);
             actorIdToGamePlayerMap.Add(player.ActorNumber, gamePlayer);
@@ -346,7 +360,7 @@ public class GameController : MonoBehaviourPun
             {
                 cards.Add(deckController.DrawCardTop());
             }
-            actorIdToGamePlayerMap[player.ActorNumber].InitCards(cards, player.IsLocal);
+            actorIdToGamePlayerMap[player.ActorNumber].InitCards(cards);
         }
     }
 
@@ -396,7 +410,7 @@ public class GameController : MonoBehaviourPun
         cardAction.Execute(actorNumber, targetActorNumber);
     }
     
-    public void LocalPlayerPlaysCards(int actorNumber, List<(CardType, Guid)> playedCards)
+    public void LocalPlayerPlaysCards(int actorNumber, List<(CardType, Guid)> playedCards, int targetActorNumber)
     {
         Logger.Log($"Cat Combo Play: {actorIdToPhotonPlayerMap[actorNumber].NickName} plays " +
                    $"{playedCards[0].Item1} with {{playedCards.Count}} cards");
@@ -408,6 +422,8 @@ public class GameController : MonoBehaviourPun
     
     public void ForcePlayerTakeTwoTurn(int targetActor)
     {
+        // Wraps it so it starts from 1 till player count, NOT FROM 0
+        targetActor = (targetActor - 1) % actorIdToGamePlayerMap.Count + 1;
         NetworkManager.SendSetActorTurn(targetActor);
         NetworkManager.SendDrawCard(targetActor, 2, true);
     }
@@ -470,5 +486,33 @@ public class GameController : MonoBehaviourPun
         }
         
         Logger.Log($"Winning Player : {actorIdToPhotonPlayerMap[aliveActors[0]].NickName}");
+    }
+
+    public void ShowTargetSelection()
+    {
+        foreach (Player player in actorIdToPhotonPlayerMap.Values)
+        {
+            if (player.IsLocal)
+            {
+                continue;
+            }
+
+            GamePlayer gamePlayer = actorIdToGamePlayerMap[player.ActorNumber];
+            gamePlayer.ShowSelectionUI();
+        }
+    }
+
+    public void HideTargetSelection()
+    {
+        foreach (Player player in actorIdToPhotonPlayerMap.Values)
+        {
+            if (player.IsLocal)
+            {
+                continue;
+            }
+
+            GamePlayer gamePlayer = actorIdToGamePlayerMap[player.ActorNumber];
+            gamePlayer.HideSelectionUI();
+        }
     }
 }

@@ -1,11 +1,10 @@
 using System;
-using System.Collections.Generic;
 using DG.Tweening;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
-public class HandCardController : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler, IPointerClickHandler
+public class CardController : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler, IPointerClickHandler
 {
     [SerializeField] private Image image;
     [field: SerializeField] public CardType CardType { get; private set; }
@@ -61,10 +60,14 @@ public class HandCardController : MonoBehaviour, IPointerEnterHandler, IPointerE
         OnClick?.Invoke(CardInstanceLocal, CardType);
     }
 
+    public void SetPosition(Vector3 position)
+    {
+        originalPos = position;
+    }
+
     public void Select()
     {
         isSelected = true;
-        originalPos = rectTransform.anchoredPosition;
         
         rectTransform.DOKill(true);
         DOTween.Sequence()

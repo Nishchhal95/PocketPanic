@@ -1,8 +1,7 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
-using DG.Tweening;
+using System.Threading.Tasks;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -14,43 +13,30 @@ public class GamePlayer : MonoBehaviour
     [SerializeField] private TMP_Text playerNameTextField;
     [SerializeField] private Button playCardButton;
     [SerializeField] private Button selectButton;
-    [SerializeField] private HandCardController handCardPrefab;
+    [SerializeField] private CardController cardPrefab;
     [SerializeField] private Transform cardContainer;
     [SerializeField] private Sprite backFace;
     [SerializeField] private int actorNumber;
     [SerializeField] private string userId;
-    
-    [SerializeField] private float cardSpacing = 160f;
-    [SerializeField] private float moveDuration = 0.3f;
-    [SerializeField] private float padding = 20f;
 
+    [SerializeField] private HandLayoutManager handLayoutManager;
+    
     private bool isLocal;
     private List<CardType> cards = new();
-    private List<HandCardController> handCardControllers = new();
+    private List<CardController> cardControllers = new();
 
-    private float containerWidth = -1f;
-    private float cardWidth = -1f;
-    
-    private List<HandCardController> selectedCards = new();
-    private int targetPlayer = -1;
+    private List<CardController> selectedCards = new();
+
+    private bool isSelectingTarget = false;
+    private TaskCompletionSource<int> selectionTask;
 
     private void OnValidate()
     {
-        UpdateHandLayout();
+        handLayoutManager?.UpdateHandLayout();
     }
 
     private void OnEnable()
     {
-        if (playCardButton != null)
-        {
-            playCardButton.onClick.AddListener(OnPlayClicked);
-        }
-
-        if (selectButton != null)
-        {
-            selectButton.onClick.AddListener(OnPlayerSelectedClicked);
-        }
-        
         PlayerSelected += OnTargetActorSelected;
     }
 
@@ -69,25 +55,147 @@ public class GamePlayer : MonoBehaviour
         PlayerSelected -= OnTargetActorSelected;
     }
 
-    public void Init(string playerName, int actorNumber, string userId)
+    public void Init(string playerName, int actorNumber, string userId, bool isLocal)
     {
         playerNameTextField.SetText(playerName);
         this.actorNumber = actorNumber;
         this.userId = userId;
+        this.isLocal = isLocal;
+
+        if (this.isLocal)
+        {
+            LocalSetup();
+        }
+        else
+        {
+            RemoteSetup();
+        }
     }
 
-    public void InitCards(List<CardType> cards, bool isLocal)
+    private void LocalSetup()
+    {
+        playCardButton.gameObject.SetActive(true);
+        playCardButton.interactable = false;
+        
+        playCardButton.onClick.AddListener(OnPlayClicked);
+    }
+
+    private void RemoteSetup()
+    {
+        selectButton.gameObject.SetActive(false);
+        
+        selectButton.onClick.AddListener(OnPlayerSelectedClicked);
+    }
+
+    public void InitCards(List<CardType> cards)
     {
         this.cards = cards;
-        this.isLocal = isLocal;
-        if (playCardButton != null)
-        {
-            playCardButton.gameObject.SetActive(isLocal);
-        }
         Logger.Log($"{playerNameTextField.text} has {string.Join(", ", cards)}");
 
+        handLayoutManager = new HandLayoutManager(cardControllers,
+            cardPrefab.GetComponent<RectTransform>().rect.width,
+            ((RectTransform)cardContainer).rect.width);
+        
         CreateHandCards();
         UpdatePlayButtonState();
+    }
+    
+    private void CreateHandCards()
+    {
+        foreach (var cardType in cards)
+        {
+            AddCardVisual(cardType);
+        }
+        
+        handLayoutManager.UpdateHandLayout();
+    }
+
+    #region Card Functions
+
+    public void AddCard(CardType cardType)
+    {
+        cards.Add(cardType);
+        AddCardVisual(cardType);
+        
+        DeselectSelectedCards();
+        handLayoutManager.UpdateHandLayout();
+    }
+    
+    public CardType GetCard(int index)
+    {
+        return cards[index];
+    }
+    
+    public bool HasCard(CardType cardType)
+    {
+        return cards.Contains(cardType);
+    }
+    
+    public void RemoveCard(CardType cardType)
+    {
+        int index = cardControllers.FindIndex(x => x.CardType == cardType);
+        if (index == -1)
+        {
+            return;
+        }
+
+        cards.RemoveAt(index);
+
+        CardController cardController = cardControllers[index];
+        cardController.OnClick -= OnCardClicked;
+        cardControllers.RemoveAt(index);
+        Destroy(cardController.gameObject);
+
+        DeselectSelectedCards();
+        handLayoutManager.UpdateHandLayout();
+    }
+    
+    public void RemoveCard(Guid cardInstanceLocal)
+    {
+        int index = cardControllers.FindIndex(x => x.CardInstanceLocal == cardInstanceLocal);
+        if (index == -1)
+        {
+            return;
+        }
+
+        cards.RemoveAt(index);
+
+        CardController cardController = cardControllers[index];
+        cardController.OnClick -= OnCardClicked;
+        cardControllers.RemoveAt(index);
+        Destroy(cardController.gameObject);
+
+        DeselectSelectedCards();
+        handLayoutManager.UpdateHandLayout();
+    }
+    
+    public void RemoveCard(int index)
+    {
+        if (index == -1)
+        {
+            return;
+        }
+
+        cards.RemoveAt(index);
+
+        CardController cardController = cardControllers[index];
+        cardController.OnClick -= OnCardClicked;
+        cardControllers.RemoveAt(index);
+        Destroy(cardController.gameObject);
+
+        DeselectSelectedCards();
+        handLayoutManager.UpdateHandLayout();
+    }
+
+    #endregion
+    
+    private void AddCardVisual(CardType cardType)
+    {
+        CardData cardData = CardDatabase.Instance.Get(cardType);
+        CardController cardController = Instantiate(cardPrefab, cardContainer);
+        cardController.Init(cardType, Guid.NewGuid(), cardData.artwork);
+        cardController.OnClick += OnCardClicked;
+        cardControllers.Add(cardController);
     }
     
     private void OnPlayerSelectedClicked()
@@ -97,7 +205,15 @@ public class GamePlayer : MonoBehaviour
 
     private void OnTargetActorSelected(int targetActor)
     {
-        targetPlayer = targetActor;
+        if (!isSelectingTarget)
+        {
+            return;
+        }
+
+        GameController.Instance.HideTargetSelection();
+        isSelectingTarget = false;
+        
+        selectionTask.SetResult(actorNumber);
     }
 
     private void OnPlayClicked()
@@ -108,71 +224,47 @@ public class GamePlayer : MonoBehaviour
             return;
         }
 
-        StartCoroutine(HandleCardPlayedRoutine());
+        _ = HandleCardPlayed();
     }
 
-    private IEnumerator HandleCardPlayedRoutine()
+    private async Task HandleCardPlayed()
     {
+        int targetActorNumber = -1;
         if (selectedCards.Count == 1)
         {
             CardType playedCardType = selectedCards[0].CardType;
 
             if (Utilites.DoesCardNeedToSelectTarget(playedCardType))
             {
-                SelectTargetActor();
-                //yield return new WaitUntil(() => targetPlayer != -1);
+                targetActorNumber = await SelectTargetActorAsync();
             }
 
-            targetPlayer = PhotonNetworkController.GetPlayersCurrentRoom().ToList()
-                .Find(x => x.ActorNumber != actorNumber).ActorNumber;
             GameController.Instance.LocalPlayerPlaysCard(actorNumber, playedCardType, 
-                selectedCards[0].CardInstanceLocal, targetPlayer);
+                selectedCards[0].CardInstanceLocal, targetActorNumber);
         }
         else
         {
-            SelectTargetActor();
-            yield return new WaitUntil(() => targetPlayer != -1);
+            targetActorNumber = await SelectTargetActorAsync();
             
             List<(CardType, Guid)> tupleList = selectedCards.Select(cardController => 
                 (cardController.CardType, cardController.CardInstanceLocal)).ToList();
-            GameController.Instance.LocalPlayerPlaysCards(actorNumber, tupleList);
+            GameController.Instance.LocalPlayerPlaysCards(actorNumber, tupleList, targetActorNumber);
         }
     }
 
-    private void SelectTargetActor()
+    private Task<int> SelectTargetActorAsync()
     {
-        
-    }
-
-    private void CreateHandCards()
-    {
-        foreach (var cardType in cards)
+        if (isSelectingTarget)
         {
-            AddCardVisual(cardType);
+            Logger.Warning("Target selecting in Progress");
+            return selectionTask?.Task ?? Task.FromResult(-1);
         }
-        
-        UpdateHandLayout();
-    }
 
-    public bool HasCard(CardType cardType)
-    {
-        return cards.Contains(cardType);
-    }
+        isSelectingTarget = true;
+        selectionTask = new TaskCompletionSource<int>();
+        GameController.Instance.ShowTargetSelection();
 
-    public void AddCard(CardType cardType)
-    {
-        cards.Add(cardType);
-        AddCardVisual(cardType);
-        UpdateHandLayout(); 
-    }
-    
-    private void AddCardVisual(CardType cardType)
-    {
-        CardData cardData = CardDatabase.Instance.Get(cardType);
-        HandCardController handCardController = Instantiate(handCardPrefab, cardContainer);
-        handCardController.Init(cardType, Guid.NewGuid(), cardData.artwork);
-        handCardController.OnClick += OnCardClicked;
-        handCardControllers.Add(handCardController);
+        return selectionTask.Task;
     }
 
     private void OnCardClicked(Guid selectedCardInstanceGuid, CardType selectedCardType)
@@ -183,8 +275,8 @@ public class GamePlayer : MonoBehaviour
             return;
         }
         
-        HandCardController clickedCard = 
-            handCardControllers.Find(x => x.CardInstanceLocal == selectedCardInstanceGuid);
+        CardController clickedCard = 
+            cardControllers.Find(x => x.CardInstanceLocal == selectedCardInstanceGuid);
 
         // --- CASE 1: Already selected → Deselect it
         if (selectedCards.Contains(clickedCard))
@@ -245,7 +337,7 @@ public class GamePlayer : MonoBehaviour
         UpdatePlayButtonState();
     }
     
-    private void SelectCard(HandCardController card)
+    private void SelectCard(CardController card)
     {
         selectedCards.Add(card);
         card.Select();
@@ -253,121 +345,19 @@ public class GamePlayer : MonoBehaviour
 
     private void DeselectSelectedCards()
     {
-        foreach (HandCardController card in selectedCards)
+        foreach (CardController card in selectedCards)
         {
             card.Deselect();
         }
     }
 
-    private void ResetSelection(HandCardController newCard)
+    private void ResetSelection(CardController newCard)
     {
         DeselectSelectedCards();
         selectedCards.Clear();
         SelectCard(newCard);
     }
-
-    public CardType GetCard(int index)
-    {
-        return cards[index];
-    }
     
-    public void RemoveCard(int index)
-    {
-        if (index == -1)
-        {
-            return;
-        }
-
-        cards.RemoveAt(index);
-
-        HandCardController handCardController = handCardControllers[index];
-        handCardController.OnClick -= OnCardClicked;
-        handCardControllers.RemoveAt(index);
-        Destroy(handCardController.gameObject);
-
-        UpdateHandLayout();
-    }
-
-    public void RemoveCard(Guid cardInstanceLocal)
-    {
-        int index = handCardControllers.FindIndex(x => x.CardInstanceLocal == cardInstanceLocal);
-        if (index == -1)
-        {
-            return;
-        }
-
-        cards.RemoveAt(index);
-
-        HandCardController handCardController = handCardControllers[index];
-        handCardController.OnClick -= OnCardClicked;
-        handCardControllers.RemoveAt(index);
-        Destroy(handCardController.gameObject);
-
-        UpdateHandLayout();
-    }
-    
-    public void RemoveCard(CardType cardType)
-    {
-        int index = handCardControllers.FindIndex(x => x.CardType == cardType);
-        if (index == -1)
-        {
-            return;
-        }
-
-        cards.RemoveAt(index);
-
-        HandCardController handCardController = handCardControllers[index];
-        handCardController.OnClick -= OnCardClicked;
-        handCardControllers.RemoveAt(index);
-        Destroy(handCardController.gameObject);
-
-        UpdateHandLayout();
-    }
-    
-    private void UpdateHandLayout()
-    {
-        int count = handCardControllers.Count;
-        if (count == 0)
-        {
-            return;
-        }
-
-        float spacing = GetValidCardSpacing();
-        float totalWidth = (count - 1) * spacing;
-        float startX = -totalWidth / 2f;
-
-        for (int i = 0; i < count; i++)
-        {
-            float xPos = startX + i * spacing;
-
-            RectTransform rect = handCardControllers[i].GetComponent<RectTransform>();
-            rect.DOAnchorPos(new Vector2(xPos, 0), moveDuration).SetEase(Ease.OutQuad);
-            handCardControllers[i].transform.SetSiblingIndex(i);
-        }
-    }
-    
-    private float GetValidCardSpacing()
-    {
-        int cardCount = handCardControllers.Count;
-        if (cardCount <= 1)
-        {
-            return cardSpacing;
-        }
-
-        if (Mathf.Approximately(cardWidth, -1f))
-        {
-            cardWidth = handCardPrefab.GetComponent<RectTransform>().rect.width;
-        }
-        
-        if (Mathf.Approximately(containerWidth, -1f))
-        {
-            containerWidth = ((RectTransform)cardContainer).rect.width;
-        }
-        
-        float maxSpacing = (containerWidth - cardWidth - padding)/ (cardCount - 1);
-        return Mathf.Max(cardSpacing, maxSpacing);
-    }
-
     private void UpdatePlayButtonState()
     {
         if (!isLocal)
@@ -382,5 +372,15 @@ public class GamePlayer : MonoBehaviour
         }
         
         playCardButton.interactable = true;
+    }
+
+    public void ShowSelectionUI()
+    {
+        selectButton.gameObject.SetActive(true);
+    }
+    
+    public void HideSelectionUI()
+    {
+        selectButton.gameObject.SetActive(false);
     }
 }
