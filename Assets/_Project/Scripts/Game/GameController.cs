@@ -15,14 +15,13 @@ public class GameController : MonoBehaviourPun
     [SerializeField] private GamePlayer localGamePlayerPrefab;
     [SerializeField] private GamePlayer remoteGamePlayerPrefab;
 
-    private int currentTurn = -1;
-    
-    public bool IsMyTurn => currentRoomPlayers[currentTurn].IsLocal;
-
     // This is an ordered list by ActorNumber
-    private Player[] currentRoomPlayers => PhotonNetworkController.GetPlayersCurrentRoom();
     private Dictionary<int, Player> actorIdToPhotonPlayerMap = new();
     private Dictionary<int, GamePlayer> actorIdToGamePlayerMap = new();
+    private List<int> aliveActors;
+
+    public TurnManager TurnManager { get; private set; }
+    [field: SerializeField] public NetworkManager NetworkManager { get; private set; }
     
     private void Awake()
     {
@@ -38,17 +37,47 @@ public class GameController : MonoBehaviourPun
 
     private void OnEnable()
     {
-        gameCanvasController.CardDeckClicked += LocalPlayerPicksACard;
+        gameCanvasController.CardDeckClicked += OnDrawCardClicked;
+
+        NetworkManager.OnGameStarted += OnGameStarted;
+        NetworkManager.OnCardDrawn += OnCardDrawn;
+        NetworkManager.OnEndTurn += OnEndTurn;
+        NetworkManager.OnSetActorTurn += OnSetActorTurn;
+        NetworkManager.OnDefuseUsed += OnDefuseUsed;
+        NetworkManager.OnPlayerExploded += OnPlayerExploded;
+        NetworkManager.OnActionCardPlayed += OnActionCardPlayed;
+        NetworkManager.OnShuffleDeck += OnShuffleDeck;
+        NetworkManager.OnRequestFavorCard += OnRequestFavorCard;
+        NetworkManager.OnResponseFavorCard += OnResponseFavorCard;
     }
 
     private void OnDisable()
     {
-        gameCanvasController.CardDeckClicked -= LocalPlayerPicksACard;
+        gameCanvasController.CardDeckClicked -= OnDrawCardClicked;
+        
+        NetworkManager.OnGameStarted -= OnGameStarted;
+        NetworkManager.OnCardDrawn -= OnCardDrawn;
+        NetworkManager.OnEndTurn -= OnEndTurn;
+        NetworkManager.OnSetActorTurn -= OnSetActorTurn;
+        NetworkManager.OnDefuseUsed -= OnDefuseUsed;
+        NetworkManager.OnPlayerExploded -= OnPlayerExploded;
+        NetworkManager.OnActionCardPlayed -= OnActionCardPlayed;
+        NetworkManager.OnShuffleDeck -= OnShuffleDeck;
+        NetworkManager.OnRequestFavorCard -= OnRequestFavorCard;
+        NetworkManager.OnResponseFavorCard -= OnResponseFavorCard;
     }
 
     private void Start()
     {
         //TestCardsSpreadNoNetwork();
+    }
+
+    private void InitializeManagers()
+    {
+        aliveActors = actorIdToPhotonPlayerMap.Values.ToList().ConvertAll(x => x.ActorNumber);
+        
+        TurnManager = new TurnManager(PhotonNetworkController.GetPlayersCurrentRoom(), actorIdToGamePlayerMap, 
+            gameCanvasController);
     }
 
     private void TestCardsSpreadNoNetwork()
@@ -79,9 +108,7 @@ public class GameController : MonoBehaviourPun
         gamePlayer.InitCards(cards, true);
     }
 
-    #region NetworkCalls
-
-    public void SendStartGameToAll()
+    public void StartGameNetworked()
     {
         if (!PhotonNetworkController.IsMasterClient())
         {
@@ -92,137 +119,198 @@ public class GameController : MonoBehaviourPun
         // Generate and Shuffle Deck for all players
         int randomSeedInitial = UnityEngine.Random.Range(1, 99999);
         int randomSeedFinal = UnityEngine.Random.Range(1, 99999);
-        photonView.RPC(nameof(GameStartedRPC), RpcTarget.All, randomSeedInitial, randomSeedFinal);
+        
+        NetworkManager.SendStartGame(randomSeedInitial, randomSeedFinal);
     }
 
-    private void SendEndTurnToAll()
-    {
-        photonView.RPC(nameof(EndTurnRPC), RpcTarget.All);
-    }
-    
-    private void SendSetTurnForAll(int turn)
-    {
-        photonView.RPC(nameof(SetTurnRPC), RpcTarget.All, turn);
-    }
+    #region RPC Handlers
 
-    private void SendCardPickedVisualToAll()
-    {
-        photonView.RPC(nameof(CardPickedVisualRPC), RpcTarget.All);
-    }
-    
-    private void SendCardPickedVisualBottomToAll()
-    {
-        photonView.RPC(nameof(CardPickedVisualBottomRPC), RpcTarget.All);
-    }
-
-    private void SendCardPlayerVisualToAll(int actorNumber, CardType cardType)
-    {
-        photonView.RPC(nameof(CardPlayedVisualRPC), RpcTarget.All, actorNumber, (int)cardType);
-    }
-
-    private void SendShuffleToAll(int randomSeed)
-    {
-        photonView.RPC(nameof(ShuffleDeckRPC), RpcTarget.All, randomSeed);
-    }
-
-    private void SendForcePickCardsForCurrentTurn(int count)
-    {
-        photonView.RPC(nameof(ForcePickCardsForCurrentTurnRPC), RpcTarget.All, count);
-    }
-
-    private void SendTakeCardFromPlayerToAll(int actionActorNumber, int targetActorNumber, int cardIndex)
-    {
-        photonView.RPC(nameof(TakeCardsFromPlayerRPC), RpcTarget.All, actionActorNumber, targetActorNumber, cardIndex);
-    }
-
-    #endregion
-
-    #region RPCs
-    
-    [PunRPC]
-    private void GameStartedRPC(int seedInitial, int seedFinal)
+    private void OnGameStarted(int seed1, int seed2)
     {
         GameEvents.RaiseGameStarted();
-        SetupGame(seedInitial, seedFinal);
+        SetupGame(seed1, seed2);
     }
 
-    [PunRPC]
-    private void EndTurnRPC()
+    private void OnCardDrawn(int actorNumber, int count, bool top)
     {
-        currentTurn++;
-        SetCurrentTurn(currentTurn);
+        if (deckController.IsDeckEmpty())
+        {
+            // Maybe create a new deck if needed.
+            Logger.Error("Draw Deck is Empty!");
+            return;
+        }
+
+        StartCoroutine(OnCardDrawRoutine(actorNumber, count, top));
     }
     
-    [PunRPC]
-    private void SetTurnRPC(int turn)
+    private IEnumerator OnCardDrawRoutine(int actorNumber, int count, bool top)
     {
-        Logger.Log($"SetTurnRPC Start, Current Turn {currentTurn} and setting to {turn}");
-        SetCurrentTurn(turn);
-        Logger.Log($"SetTurnRPC End, Current Turn {currentTurn}");
+        /* So why do I do this (Why do I draw cards first and loop again to check if I draw an Explode?)
+        This is because there could be a case when I draw 2 cards,
+        1 could be Explode and the 2nd could be a Defuse,
+        so to handle that case I think it is always better to draw all the required cards and then iterate over them
+        to check if I did Explode or not? */
+        CardType[] cardsDrawn = new CardType[count];
+        for (int i = 0; i < count; i++)
+        {
+            GamePlayer gamePlayer = actorIdToGamePlayerMap[actorNumber];
+
+            CardType drawnCard = top ? deckController.DrawCardTop() : deckController.DrawCardBottom();
+            cardsDrawn[i] = drawnCard;
+            gamePlayer.AddCard(drawnCard);
+
+            if (count > 1)
+            {
+                yield return new WaitForSecondsRealtime(1f);
+            }
+        }
+
+        if (!cardsDrawn.Contains(CardType.Explode))
+        {
+            OnEndTurn();
+            yield break;
+        }
+        
+        for (int i = 0; i < cardsDrawn.Length; i++)
+        {
+            CardType drawnCard = cardsDrawn[i];
+            if (drawnCard == CardType.Explode)
+            {
+                Logger.Log($"{actorIdToPhotonPlayerMap[actorNumber].NickName} draws Explode!");
+            
+                // Handle Explode locally for Player
+                if (!TurnManager.IsMyTurn)
+                {
+                    yield break;
+                }
+                
+                yield return StartCoroutine(HandleExplodingDrawnRoutine(actorNumber));
+            }
+        }
+        
+        NetworkManager.SendEndTurn();
     }
-    
-    [PunRPC]
-    private void CardPickedVisualRPC()
+
+    private IEnumerator HandleExplodingDrawnRoutine(int actorNumber)
     {
-        CardType cardType = deckController.DrawCardTop();
-        GetGamePlayerForTurn(currentTurn).AddCard(cardType);
+        GamePlayer gamePlayer = actorIdToGamePlayerMap[actorNumber];
+        bool hasDefuse = gamePlayer.HasCard(CardType.Defuse);
+        
+        yield return new WaitForSecondsRealtime(1f);
+
+        if (hasDefuse)
+        {
+            Logger.Log("Placing Explode back in the Deck");
+            yield return new WaitForSecondsRealtime(1f);
+            int explodeIndex = 1;
+            NetworkManager.SendDefuseUsed(actorNumber, explodeIndex);
+        }
+        else
+        {
+            // Next Turn happens from here
+            NetworkManager.SendPlayerExploded(actorNumber);
+        }
     }
-    
-    [PunRPC]
-    private void CardPickedVisualBottomRPC()
+
+    private void OnEndTurn()
     {
-        CardType cardType = deckController.DrawCardBottom();
-        GetGamePlayerForTurn(currentTurn).AddCard(cardType);
+        TurnManager.EndTurn();
     }
-    
-    [PunRPC]
-    private void CardPlayedVisualRPC(int actorNumber, int cardType)
+
+    private void OnSetActorTurn(int actorTurn)
     {
-        // Locally we remove card by Instance GUID
+        TurnManager.SetActorsTurn(actorTurn);
+    }
+
+    private void OnDefuseUsed(int actorNumber, int explodeIndex)
+    {
+        // Need to Play
+        GamePlayer gamePlayer = actorIdToGamePlayerMap[actorNumber];
+        gamePlayer.RemoveCard(CardType.Explode);
+        gamePlayer.RemoveCard(CardType.Defuse);
+                
+        deckController.InsertCardAtIndex(CardType.Explode, explodeIndex);
+    }
+
+    private void OnPlayerExploded(int actorNumber)
+    {
+        Logger.Log($"{TurnManager.GetPhotonPlayerForCurrentTurn().NickName} Exploded");
+        MarkPlayerDead(actorNumber);
+    }
+
+    private void OnActionCardPlayed(int actorNumber, int cardTypeInt)
+    {
+        // Locally we remove card by Instance GUID already
         if (actorNumber == PhotonNetworkController.GetLocalPlayer().ActorNumber)
         {
             return;
         }
-        actorIdToGamePlayerMap[actorNumber].RemoveCard((CardType)cardType);
-    }
-    
-    [PunRPC]
-    private void ShuffleDeckRPC(int randomSeed)
-    {
-        deckController.Shuffle(randomSeed);
-    }
-    
-    [PunRPC]
-    private void ForcePickCardsForCurrentTurnRPC(int count)
-    {
-        CurrentTurnPicksCards(count);
-    }
-    
-    [PunRPC]
-    private void TakeCardsFromPlayerRPC(int actionActorNumber, int targetActorNumber, int cardIndex)
-    {
-        CardType cardType = actorIdToGamePlayerMap[targetActorNumber].GetCard(cardIndex);
-        actorIdToGamePlayerMap[targetActorNumber].RemoveCard(cardIndex);
+
+        GamePlayer gamePlayer = actorIdToGamePlayerMap[actorNumber];
+        CardType cardType = (CardType)cardTypeInt;
+        gamePlayer.RemoveCard(cardType);
         
-        actorIdToGamePlayerMap[actionActorNumber].AddCard(cardType);
+        // Maybe Start a Timer for a Nope Card??
+    }
+
+    private void OnShuffleDeck(int shuffleSeed)
+    {
+        deckController.Shuffle(shuffleSeed);
+    }
+
+    private void OnRequestFavorCard(int from, int to)
+    {
+        Logger.Log($"{actorIdToPhotonPlayerMap[from].NickName} " +
+                   $"requested a Favor from {actorIdToPhotonPlayerMap[to].NickName}");
+        if (PhotonNetworkController.GetLocalPlayer().ActorNumber == to)
+        {
+            StartCoroutine(RequestingFavorCardRoutine(from, to));
+        }
+    }
+
+    private IEnumerator RequestingFavorCardRoutine(int from, int to)
+    {
+        Logger.Log("Showing Some Request UI");
+        yield return new WaitForSecondsRealtime(1f);
+        
+        GamePlayer gamePlayer = actorIdToGamePlayerMap[to];
+        CardType cardType = gamePlayer.GetCard(1);
+        
+        NetworkManager.SendResponseFavorCard(to, from, (int)cardType);
+    }
+
+    private void OnResponseFavorCard(int from, int to, int cardTypeInt)
+    {
+        CardType cardType = (CardType)cardTypeInt;
+        
+        Logger.Log($"{actorIdToPhotonPlayerMap[from].NickName} " +
+                   $"responded with a {cardType.ToString()} card to {actorIdToPhotonPlayerMap[to].NickName}");
+
+        GamePlayer fromGamePlayer = actorIdToGamePlayerMap[from];
+        GamePlayer toGamePlayer = actorIdToGamePlayerMap[to];
+        
+        fromGamePlayer.RemoveCard(cardType);
+        toGamePlayer.AddCard(cardType);
     }
 
     #endregion
     
     private void SetupGame(int seedInitial, int seedFinal)
     {
-        
         deckController.BuildDeckWithoutExplodeAndDiffuse();
         deckController.Shuffle(seedInitial);
         
         SpawnPlayers();
-        DistributeCards();
+        InitializeManagers();
+        DealCardsToPlayers();
         
         deckController.AddExplode(PhotonNetworkController.GetPlayerCountInCurrentRoom());
         deckController.AddDefuse(2);
         deckController.Shuffle(seedFinal);
         
-        EndTurnRPC();
+        deckController.InsertCardAtIndex(CardType.Explode);
+        
+        TurnManager.EndTurn();
     }
 
     private void SpawnPlayers()
@@ -247,7 +335,7 @@ public class GameController : MonoBehaviourPun
         }
     }
 
-    private void DistributeCards()
+    private void DealCardsToPlayers()
     {
         Player[] players = PhotonNetworkController.GetPlayersCurrentRoom();
 
@@ -260,13 +348,6 @@ public class GameController : MonoBehaviourPun
             }
             actorIdToGamePlayerMap[player.ActorNumber].InitCards(cards, player.IsLocal);
         }
-    }
-
-    private void SetCurrentTurn(int value)
-    {
-        currentTurn = value;
-        currentTurn %= PhotonNetworkController.GetPlayerCountInCurrentRoom();
-        gameCanvasController.UpdateTurn(GetPlayerForTurn(currentTurn).NickName);
     }
 
     private List<Transform> GetPlayerSlotsFromPlayerCount(int playerCount)
@@ -283,36 +364,22 @@ public class GameController : MonoBehaviourPun
         return null;
     }
     
-    private void LocalPlayerPicksACard()
+    // Draw Card
+    private void OnDrawCardClicked()
     {
-        SendCardPickedVisualToAll();
-        SendEndTurnToAll();
-    }
-
-    private void CurrentTurnPicksCards(int count)
-    {
-        StartCoroutine(CurrentTurnPicksCardRoutine(count));
-    }
-
-    private IEnumerator CurrentTurnPicksCardRoutine(int count)
-    {
-        for (int i = 0; i < count; i++)
+        if (!TurnManager.IsMyTurn)
         {
-            CardType cardType = deckController.DrawCardTop();
-            GetGamePlayerForTurn(currentTurn).AddCard(cardType);
-
-            yield return new WaitForSecondsRealtime(1f);
+            return;
         }
-
-        if (PhotonNetworkController.IsMasterClient())
-        {
-            SendEndTurnToAll();
-        }
+        
+        NetworkManager.SendDrawCard(TurnManager.GetPhotonPlayerForCurrentTurn().ActorNumber, 1, true);
     }
-
+    
+    // Play A Card
     public void LocalPlayerPlaysCard(int actorNumber, CardType cardType, Guid cardLocalInstance, int targetActorNumber)
     {
         Logger.Log($"Normal Play: {actorIdToPhotonPlayerMap[actorNumber].NickName} plays {cardType}");
+        
         CardAction cardAction = CardActionFactory.Get(cardType);
         if (cardAction == null)
         {
@@ -324,7 +391,7 @@ public class GameController : MonoBehaviourPun
         actorIdToGamePlayerMap[actorNumber].RemoveCard(cardLocalInstance);
         
         // Network Call
-        SendCardPlayerVisualToAll(actorNumber, cardType);
+        NetworkManager.SendPlayActionCard(actorNumber, (int)cardType);
 
         cardAction.Execute(actorNumber, targetActorNumber);
     }
@@ -339,28 +406,20 @@ public class GameController : MonoBehaviourPun
 
     #region CardActions Region
     
-    public void ForceEndTurn()
-    {
-        SendEndTurnToAll();
-    }
-
     public void ForcePlayerTakeTwoTurn(int targetActor)
     {
-        SetActorsTurn(targetActor);
-        SendForcePickCardsForCurrentTurn(2);
-    }
-
-    private void SetActorsTurn(int targetActorNumber)
-    {
-        // Wraps it so it starts from 1 till player count, NOT FROM 0
-        targetActorNumber = (targetActorNumber - 1) % currentRoomPlayers.Length + 1;
-        int arrayIndex = currentRoomPlayers.ToList().FindIndex(p => p.ActorNumber == targetActorNumber);
-        SendSetTurnForAll(arrayIndex);
+        NetworkManager.SendSetActorTurn(targetActor);
+        NetworkManager.SendDrawCard(targetActor, 2, true);
     }
     
-    public void ShuffleCards(int randomShuffleSeed)
+    public void ForceEndTurn()
     {
-        SendShuffleToAll(randomShuffleSeed);
+        NetworkManager.SendEndTurn();
+    }
+    
+    public void ShuffleCards(int shuffleSeed)
+    {
+        NetworkManager.SendShuffleDeck(shuffleSeed);
     }
     
     public void ShowPlayerTopCards(int cardCount)
@@ -371,33 +430,45 @@ public class GameController : MonoBehaviourPun
         }
     }
     
-    public void GetCardFromPlayer(int actionActorNumber, int targetActorNumber, int cardIndex)
+    public void RequestCardFromPlayer(int requestingActorNumber, int targetActorNumber, int cardIndex)
     {
         // Wraps it so it starts from 1 till player count, NOT FROM 0
-        targetActorNumber = (targetActorNumber - 1) % currentRoomPlayers.Length + 1;
-
-        // User Selects 
-        SendTakeCardFromPlayerToAll(actionActorNumber, targetActorNumber, cardIndex);
+        targetActorNumber = (targetActorNumber - 1) % actorIdToGamePlayerMap.Count + 1;
+        NetworkManager.SendRequestFavorCard(requestingActorNumber, targetActorNumber);
     }
     
-    public void DrawFromBottomAndEndTurn()
+    public void DrawFromBottomAndEndTurn(int actorNumber)
     {
-        SendCardPickedVisualBottomToAll();
-        SendEndTurnToAll();
+        NetworkManager.SendDrawCard(actorNumber, 1, false);
     }
 
     #endregion
 
-    // Some Helper
-    private Player GetPlayerForTurn(int turn)
+    private void MarkPlayerDead(int deadActorNumber)
     {
-        return currentRoomPlayers[turn];
-    }
+        if (!aliveActors.Contains(deadActorNumber))
+        {
+            Logger.Error($"Player {actorIdToPhotonPlayerMap[deadActorNumber].NickName} was already dead!");
+            return;
+        }
+        
+        aliveActors.Remove(deadActorNumber);
+        TurnManager.MarkDead(deadActorNumber);
 
-    private GamePlayer GetGamePlayerForTurn(int turn)
+        if (aliveActors.Count == 1)
+        {
+            GameOver();
+        }
+    }
+    
+    private void GameOver()
     {
-        Player currentTurnPlayer = GetPlayerForTurn(turn);
-        int currentTurnPlayerActorNumber = currentTurnPlayer.ActorNumber;
-        return actorIdToGamePlayerMap[currentTurnPlayerActorNumber];
+        if (aliveActors.Count != 1)
+        {
+            Logger.Error($"Game Over failed because {aliveActors.Count} actors are alive!");
+            return;
+        }
+        
+        Logger.Log($"Winning Player : {actorIdToPhotonPlayerMap[aliveActors[0]].NickName}");
     }
 }

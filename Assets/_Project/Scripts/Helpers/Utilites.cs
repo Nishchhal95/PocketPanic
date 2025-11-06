@@ -33,4 +33,10 @@ public static class Utilites
             CardType.WatermelonCat or
             CardType.WildCat;
     }
+    
+    public static bool DoesCardNeedToSelectTarget(CardType cardType)
+    {
+        return cardType is CardType.TargetAttack or
+            CardType.Favor;
+    }
 }

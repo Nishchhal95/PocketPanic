@@ -52,7 +52,7 @@ public class TargetAttackAction : CardAction
     public override void Execute(int actorNumber, int targetActorNumber = -1)
     {
         Logger.Log($"Player {actorNumber} played TARGET ATTACK!");
-        GameController.Instance.ForcePlayerTakeTwoTurn(targetActorNumber);
+        GameController.Instance.ForcePlayerTakeTwoTurn(actorNumber + 1);
     }
 }
 
@@ -97,7 +97,7 @@ public class FavorAction : CardAction
     public override void Execute(int actorNumber, int targetActorNumber = -1)
     {
         Logger.Log($"Player {actorNumber} played FAVOR!");
-        GameController.Instance.GetCardFromPlayer(actorNumber, actorNumber + 1, 1);
+        GameController.Instance.RequestCardFromPlayer(actorNumber, actorNumber + 1, 1);
     }
 }
 
@@ -120,7 +120,7 @@ public class DrawFromBottomAction : CardAction
     public override void Execute(int actorNumber, int targetActorNumber = -1)
     {
         Logger.Log($"Player {actorNumber} played DRAW FROM BOTTOM!");
-        GameController.Instance.DrawFromBottomAndEndTurn();
+        GameController.Instance.DrawFromBottomAndEndTurn(actorNumber);
     }
 }
 

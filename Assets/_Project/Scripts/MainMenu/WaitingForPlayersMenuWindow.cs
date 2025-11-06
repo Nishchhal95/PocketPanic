@@ -104,6 +104,6 @@ public class WaitingForPlayersMenuWindow : MenuWindow
         }
         
         CloseWithoutCallback();
-        GameController.Instance.SendStartGameToAll();
+        GameController.Instance.StartGameNetworked();
     }
 }

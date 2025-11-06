@@ -47,6 +47,16 @@ MonoBehaviour:
   - ShuffleDeckRPC
   - CardPickedVisualBottomRPC
   - TakeCardsFromPlayerRPC
+  - CardPickedRPC
+  - DefuseUsedRPC
+  - DrawCardRPC
+  - PlayerExplodedRPC
+  - GameOverRPC
+  - SetActorsTurnRPC
+  - PlayActionCardRPC
+  - RequestFavorCardRPC
+  - ResponseFavorCardRPC
+  - SetActorTurnRPC
   DisableAutoOpenWizard: 1
   ShowSettings: 0
   DevRegionSetOnce: 1

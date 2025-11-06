@@ -102,8 +102,18 @@ public class DeckController : MonoBehaviour
         return cardType;
     }
 
+    public void InsertCardAtIndex(CardType cardType, int index = 0)
+    {
+        drawDeck.Insert(index, cardType);
+    }
+
     public void PlayCard(CardType cardType)
     {
         playedCardsDeck.Add(cardType);
+    }
+
+    public bool IsDeckEmpty()
+    {
+        return drawDeck.Count == 0;
     }
 }

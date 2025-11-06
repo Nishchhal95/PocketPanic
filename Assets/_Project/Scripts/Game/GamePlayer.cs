@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using DG.Tweening;
@@ -8,8 +9,11 @@ using UnityEngine.UI;
 
 public class GamePlayer : MonoBehaviour
 {
+    public static event Action<int> PlayerSelected;
+    
     [SerializeField] private TMP_Text playerNameTextField;
     [SerializeField] private Button playCardButton;
+    [SerializeField] private Button selectButton;
     [SerializeField] private HandCardController handCardPrefab;
     [SerializeField] private Transform cardContainer;
     [SerializeField] private Sprite backFace;
@@ -28,6 +32,7 @@ public class GamePlayer : MonoBehaviour
     private float cardWidth = -1f;
     
     private List<HandCardController> selectedCards = new();
+    private int targetPlayer = -1;
 
     private void OnValidate()
     {
@@ -40,6 +45,13 @@ public class GamePlayer : MonoBehaviour
         {
             playCardButton.onClick.AddListener(OnPlayClicked);
         }
+
+        if (selectButton != null)
+        {
+            selectButton.onClick.AddListener(OnPlayerSelectedClicked);
+        }
+        
+        PlayerSelected += OnTargetActorSelected;
     }
 
     private void OnDisable()
@@ -48,6 +60,13 @@ public class GamePlayer : MonoBehaviour
         {
             playCardButton.onClick.RemoveListener(OnPlayClicked);
         }
+        
+        if (selectButton != null)
+        {
+            selectButton.onClick.RemoveListener(OnPlayerSelectedClicked);
+        }
+        
+        PlayerSelected -= OnTargetActorSelected;
     }
 
     public void Init(string playerName, int actorNumber, string userId)
@@ -70,6 +89,16 @@ public class GamePlayer : MonoBehaviour
         CreateHandCards();
         UpdatePlayButtonState();
     }
+    
+    private void OnPlayerSelectedClicked()
+    {
+        PlayerSelected?.Invoke(actorNumber);
+    }
+
+    private void OnTargetActorSelected(int targetActor)
+    {
+        targetPlayer = targetActor;
+    }
 
     private void OnPlayClicked()
     {
@@ -78,18 +107,41 @@ public class GamePlayer : MonoBehaviour
             Logger.Error("Cannot play Empty Selection");
             return;
         }
-        
+
+        StartCoroutine(HandleCardPlayedRoutine());
+    }
+
+    private IEnumerator HandleCardPlayedRoutine()
+    {
         if (selectedCards.Count == 1)
         {
-            GameController.Instance.LocalPlayerPlaysCard(actorNumber, selectedCards[0].CardType, 
-                selectedCards[0].CardInstanceLocal, -1);
+            CardType playedCardType = selectedCards[0].CardType;
+
+            if (Utilites.DoesCardNeedToSelectTarget(playedCardType))
+            {
+                SelectTargetActor();
+                //yield return new WaitUntil(() => targetPlayer != -1);
+            }
+
+            targetPlayer = PhotonNetworkController.GetPlayersCurrentRoom().ToList()
+                .Find(x => x.ActorNumber != actorNumber).ActorNumber;
+            GameController.Instance.LocalPlayerPlaysCard(actorNumber, playedCardType, 
+                selectedCards[0].CardInstanceLocal, targetPlayer);
         }
         else
         {
+            SelectTargetActor();
+            yield return new WaitUntil(() => targetPlayer != -1);
+            
             List<(CardType, Guid)> tupleList = selectedCards.Select(cardController => 
                 (cardController.CardType, cardController.CardInstanceLocal)).ToList();
             GameController.Instance.LocalPlayerPlaysCards(actorNumber, tupleList);
         }
+    }
+
+    private void SelectTargetActor()
+    {
+        
     }
 
     private void CreateHandCards()
@@ -125,7 +177,7 @@ public class GamePlayer : MonoBehaviour
 
     private void OnCardClicked(Guid selectedCardInstanceGuid, CardType selectedCardType)
     {
-        if (!GameController.Instance.IsMyTurn)
+        if (!GameController.Instance.TurnManager.IsMyTurn)
         {
             DeselectSelectedCards();
             return;

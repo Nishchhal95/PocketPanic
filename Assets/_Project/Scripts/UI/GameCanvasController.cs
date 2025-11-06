@@ -31,6 +31,6 @@ public class GameCanvasController : MonoBehaviour
     public void UpdateTurn(string playerName)
     {
         currentTurnNameIndicatorTextField.SetText(playerName);
-        cardDeckButton.interactable = GameController.Instance.IsMyTurn;
+        cardDeckButton.interactable = GameController.Instance.TurnManager.IsMyTurn;
     }
 }
