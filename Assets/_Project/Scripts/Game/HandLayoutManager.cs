@@ -14,15 +14,24 @@ public class HandLayoutManager
     private float cardWidth;
     private float containerWidth;
 
+    private bool initialized;
+
     public HandLayoutManager(List<CardController> cardControllers, float cardWidth, float containerWidth)
     {
         this.cardControllers = cardControllers;
         this.cardWidth = cardWidth;
         this.containerWidth = containerWidth;
+
+        initialized = true;
     }
 
     public void UpdateHandLayout()
     {
+        if (!initialized)
+        {
+            return;
+        }
+        
         int count = cardControllers.Count;
         if (count == 0)
         {
