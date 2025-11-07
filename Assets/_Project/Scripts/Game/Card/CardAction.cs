@@ -10,7 +10,7 @@ public static class CardActionFactory
         { CardType.Shuffle, new ShuffleAction() },
         { CardType.SeeTheFuture, new SeeTheFutureAction() },
         { CardType.Favor, new FavorAction() },
-        { CardType.AlterTheFuture, new SeeTheFutureAction() },
+        { CardType.AlterTheFuture, new AlterTheFutureAction() },
         { CardType.DrawFromBottom, new DrawFromBottomAction() },
         { CardType.Nope, new NopeAction() },
     };
@@ -108,8 +108,7 @@ public class AlterTheFutureAction : CardAction
     public override void Execute(int actorNumber, int targetActorNumber = -1)
     {
         Logger.Log($"Player {actorNumber} played ALTER THE FUTURE!");
-        int randomShuffleSeed = UnityEngine.Random.Range(1, 99999);
-        GameController.Instance.ShuffleCards(randomShuffleSeed);
+        GameController.Instance.ShowAndAlterTopCard(actorNumber, 3);
     }
 }
 

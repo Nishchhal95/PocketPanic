@@ -427,6 +427,14 @@ MonoBehaviour:
   backFace: {fileID: 8957324059118975939, guid: 6a51ea6a0c2a29444803b3654b07f41b, type: 3}
   actorNumber: 0
   userId: 
+  localPlayerCardWidth: 200
+  localPlayerCardHeight: 300
+  remotePlayerCardWidth: 100
+  remotePlayerCardHeight: 130
+  handLayoutManager:
+    cardSpacing: 0
+    moveDuration: 0
+    padding: 0
 --- !u!1 &7387403664462672270
 GameObject:
   m_ObjectHideFlags: 0

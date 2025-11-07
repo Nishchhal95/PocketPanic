@@ -18,23 +18,30 @@ public class CardController : MonoBehaviour, IPointerEnterHandler, IPointerExitH
     
     private RectTransform rectTransform;
     private Vector2 originalPos;
-    private bool isSelected = false;
+    private bool isSelected;
+    private bool isLocal;
     
     private void Awake()
     {
         rectTransform = GetComponent<RectTransform>();
     }
 
-    public void Init(CardType cardType, Guid cardInstanceLocal, Sprite sprite)
+    public void Init(CardType cardType, Guid cardInstanceLocal, Sprite sprite, bool isLocal)
     {
         CardType = cardType;
         CardInstanceLocal = cardInstanceLocal;
+        image.sprite = sprite;
+        this.isLocal = isLocal;
+    }
+
+    public void SetSprite(Sprite sprite)
+    {
         image.sprite = sprite;
     }
 
     public void OnPointerEnter(PointerEventData eventData)
     {       
-        if (isSelected)
+        if (!isLocal || isSelected)
         {
             return;
         }
@@ -46,7 +53,7 @@ public class CardController : MonoBehaviour, IPointerEnterHandler, IPointerExitH
 
     public void OnPointerExit(PointerEventData eventData)
     {
-        if (isSelected)
+        if (!isLocal || isSelected)
         {
             return;
         }
@@ -57,6 +64,10 @@ public class CardController : MonoBehaviour, IPointerEnterHandler, IPointerExitH
 
     public void OnPointerClick(PointerEventData eventData)
     {
+        if (!isLocal)
+        {
+            return;
+        }
         OnClick?.Invoke(CardInstanceLocal, CardType);
     }
 

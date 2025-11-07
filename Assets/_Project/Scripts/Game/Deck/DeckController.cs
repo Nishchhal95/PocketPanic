@@ -8,6 +8,8 @@ public class DeckController : MonoBehaviour
     private List<CardType> drawDeck = new();
     private List<CardType> playedCardsDeck = new();
 
+    private int recreatedDeckShuffleSeed = 25;
+
     public void BuildDeckWithoutExplodeAndDiffuse()
     {
         foreach (DeckConfig.CardEntry cardEntry in deckConfig.cards)
@@ -115,5 +117,14 @@ public class DeckController : MonoBehaviour
     public bool IsDeckEmpty()
     {
         return drawDeck.Count == 0;
+    }
+
+    public void CreateDeckFromPlayedCards()
+    {
+        drawDeck = playedCardsDeck;
+        Logger.Log($"CreateDeckFromPlayedCards -> {string.Join(", ", drawDeck)}" );
+        Shuffle(recreatedDeckShuffleSeed);
+        Logger.Log($"CreateDeckFromPlayedCards After Shuffle -> {string.Join(", ", drawDeck)}" );
+        playedCardsDeck.Clear();
     }
 }

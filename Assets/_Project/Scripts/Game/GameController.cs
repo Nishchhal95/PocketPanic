@@ -26,6 +26,8 @@ public class GameController : MonoBehaviourPun
     private GamePlayer testPlayer;
     [SerializeField] private CardType testAddCardType;
     [SerializeField] private CardType testRemoveCardType;
+
+    private bool canSelectCard;
     
     private void Awake()
     {
@@ -53,6 +55,7 @@ public class GameController : MonoBehaviourPun
         NetworkManager.OnShuffleDeck += OnShuffleDeck;
         NetworkManager.OnRequestFavorCard += OnRequestFavorCard;
         NetworkManager.OnResponseFavorCard += OnResponseFavorCard;
+        NetworkManager.OnAlterTheFutureCardsChanged += OnAlterTheFutureCardsChanged;
     }
 
     private void OnDisable()
@@ -69,6 +72,7 @@ public class GameController : MonoBehaviourPun
         NetworkManager.OnShuffleDeck -= OnShuffleDeck;
         NetworkManager.OnRequestFavorCard -= OnRequestFavorCard;
         NetworkManager.OnResponseFavorCard -= OnResponseFavorCard;
+        NetworkManager.OnAlterTheFutureCardsChanged -= OnAlterTheFutureCardsChanged;
     }
 
     private void Start()
@@ -149,9 +153,9 @@ public class GameController : MonoBehaviourPun
     {
         if (deckController.IsDeckEmpty())
         {
-            // Maybe create a new deck if needed.
-            Logger.Error("Draw Deck is Empty!");
-            return;
+            Logger.Log("Draw Deck is Empty, creating new Deck from Played Cards");
+            deckController.CreateDeckFromPlayedCards();
+            Logger.Log("New Draw Deck Created");
         }
 
         StartCoroutine(OnCardDrawRoutine(actorNumber, count, top));
@@ -264,6 +268,8 @@ public class GameController : MonoBehaviourPun
         CardType cardType = (CardType)cardTypeInt;
         gamePlayer.RemoveCard(cardType);
         
+        deckController.PlayCard(cardType);
+        
         // Maybe Start a Timer for a Nope Card??
     }
 
@@ -276,25 +282,38 @@ public class GameController : MonoBehaviourPun
     {
         Logger.Log($"{actorIdToPhotonPlayerMap[from].NickName} " +
                    $"requested a Favor from {actorIdToPhotonPlayerMap[to].NickName}");
-        if (PhotonNetworkController.GetLocalPlayer().ActorNumber == to)
+        
+        if (PhotonNetworkController.GetLocalPlayer().ActorNumber != to)
         {
-            StartCoroutine(RequestingFavorCardRoutine(from, to));
+            return;
         }
+        
+        RequestingFavorCardAsync(from, to);
     }
 
-    private IEnumerator RequestingFavorCardRoutine(int from, int to)
+    private async void RequestingFavorCardAsync(int from, int to)
     {
-        Logger.Log("Showing Some Request UI");
-        yield return new WaitForSecondsRealtime(1f);
+        Logger.Log("Showing Favor Request UI...");
+        GamePlayer targetPlayer = actorIdToGamePlayerMap[to];
+
+        (int, Guid, CardType) result = await targetPlayer.RequestCardToGiveAsync();
+        GamePlayer fromGamePlayer = actorIdToGamePlayerMap[from];
+        GamePlayer toGamePlayer = actorIdToGamePlayerMap[to];
         
-        GamePlayer gamePlayer = actorIdToGamePlayerMap[to];
-        CardType cardType = gamePlayer.GetCard(1);
+        fromGamePlayer.RemoveCard(result.Item2);
+        toGamePlayer.AddCard(result.Item3);
         
-        NetworkManager.SendResponseFavorCard(to, from, (int)cardType);
+        NetworkManager.SendResponseFavorCard(to, from, (int)result.Item3);
     }
 
     private void OnResponseFavorCard(int from, int to, int cardTypeInt)
     {
+        // We removed card locally for the player requesting favor from
+        if (PhotonNetworkController.GetLocalPlayer().ActorNumber == from)
+        {
+            return;
+        }
+        
         CardType cardType = (CardType)cardTypeInt;
         
         Logger.Log($"{actorIdToPhotonPlayerMap[from].NickName} " +
@@ -305,6 +324,21 @@ public class GameController : MonoBehaviourPun
         
         fromGamePlayer.RemoveCard(cardType);
         toGamePlayer.AddCard(cardType);
+    }
+
+    private void OnAlterTheFutureCardsChanged(int actorNumber, int[] cards)
+    {
+        Logger.Log($"{actorIdToPhotonPlayerMap[actorNumber].NickName} altered cards and top 3 cards are {string.Join(", ", cards)}");
+        
+        for (int i = 0; i < cards.Length; i++)
+        {
+            deckController.DrawCardTop();
+        }
+
+        for (int i = 0; i < cards.Length; i++)
+        {
+            deckController.InsertCardAtIndex((CardType)cards[i], i);
+        }
     }
 
     #endregion
@@ -343,6 +377,7 @@ public class GameController : MonoBehaviourPun
 
             GamePlayer gamePlayer = Instantiate(player.IsLocal ? localGamePlayerPrefab : remoteGamePlayerPrefab, playerSlot);
             gamePlayer.Init(player.NickName, player.ActorNumber, player.UserId, player.IsLocal);
+            gamePlayer.OnCardSelected += OnCardSelected;
             
             actorIdToPhotonPlayerMap.Add(player.ActorNumber, player);
             actorIdToGamePlayerMap.Add(player.ActorNumber, gamePlayer);
@@ -362,6 +397,11 @@ public class GameController : MonoBehaviourPun
             }
             actorIdToGamePlayerMap[player.ActorNumber].InitCards(cards);
         }
+    }
+
+    private void OnCardSelected(int actorNumber, Guid cardInstanceId, CardType cardType)
+    {
+        
     }
 
     private List<Transform> GetPlayerSlotsFromPlayerCount(int playerCount)
@@ -444,6 +484,21 @@ public class GameController : MonoBehaviourPun
         {
             Logger.Log($"Player sees Card {deckController.PeekCardAtIndexFromTop(i)} at Pos {i + 1}");
         }
+
+        gameCanvasController.ShowTheFutureUI(deckController, cardCount);
+    }
+    
+    public void ShowAndAlterTopCard(int actorNumber, int cardCount)
+    {
+        for (int i = 0; i < cardCount; i++)
+        {
+            Logger.Log($"Player sees Card {deckController.PeekCardAtIndexFromTop(i)} at Pos {i + 1}");
+        }
+
+        gameCanvasController.AlterTheFutureUI(deckController, cardCount, cards =>
+        {
+            OnAlterTheFutureConfirmed(actorNumber, cards);
+        });
     }
     
     public void RequestCardFromPlayer(int requestingActorNumber, int targetActorNumber, int cardIndex)
@@ -486,6 +541,31 @@ public class GameController : MonoBehaviourPun
         }
         
         Logger.Log($"Winning Player : {actorIdToPhotonPlayerMap[aliveActors[0]].NickName}");
+    }
+
+    private void OnAlterTheFutureConfirmed(int actorNumber, List<CardType> cards)
+    {
+        bool futureAltered = false;
+        
+        for (int i = 0; i < cards.Count; i++)
+        {
+            if (deckController.PeekCardAtIndexFromTop(i) != cards[i])
+            {
+                futureAltered = true;
+                break;
+            }
+        }
+
+        if (futureAltered)
+        {
+            int[] cardIntArray = new int[cards.Count];
+            for (int i = 0; i < cards.Count; i++)
+            {
+                cardIntArray[i] = (int)cards[i];
+            }
+            
+            NetworkManager.SendAlterTheFutureCardsChanged(actorNumber, cardIntArray);
+        }
     }
 
     public void ShowTargetSelection()

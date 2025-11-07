@@ -16,11 +16,12 @@ public class HandLayoutManager
 
     private bool initialized;
 
-    public HandLayoutManager(List<CardController> cardControllers, float cardWidth, float containerWidth)
+    public HandLayoutManager(List<CardController> cardControllers, float cardWidth, float containerWidth, float cardSpacing = 160f)
     {
         this.cardControllers = cardControllers;
         this.cardWidth = cardWidth;
         this.containerWidth = containerWidth;
+        this.cardSpacing = cardSpacing;
 
         initialized = true;
     }

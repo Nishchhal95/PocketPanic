@@ -9,6 +9,7 @@ using UnityEngine.UI;
 public class GamePlayer : MonoBehaviour
 {
     public static event Action<int> PlayerSelected;
+    public event Action<int, Guid, CardType> OnCardSelected;
     
     [SerializeField] private TMP_Text playerNameTextField;
     [SerializeField] private Button playCardButton;
@@ -19,20 +20,55 @@ public class GamePlayer : MonoBehaviour
     [SerializeField] private int actorNumber;
     [SerializeField] private string userId;
 
-    [SerializeField] private HandLayoutManager handLayoutManager;
+    [SerializeField] private float localPlayerCardWidth;
+    [SerializeField] private float localPlayerCardHeight;
     
+    [SerializeField] private float remotePlayerCardWidth;
+    [SerializeField] private float remotePlayerCardHeight;
+
+    [SerializeField] private bool showCards;
+
+    [SerializeField] private HandLayoutManager handLayoutManager;
+
+    private bool initializedCards;
     private bool isLocal;
     private List<CardType> cards = new();
     private List<CardController> cardControllers = new();
 
     private List<CardController> selectedCards = new();
 
-    private bool isSelectingTarget = false;
+    private bool isSelectingTarget;
     private TaskCompletionSource<int> selectionTask;
-
+    private TaskCompletionSource<(int, Guid, CardType)> waitingForCardTask;
+    private bool canSelectCardToGiveAway = false;
+    
     private void OnValidate()
     {
+        if (!Application.isPlaying)
+        {
+            return;    
+        }
+        
         handLayoutManager?.UpdateHandLayout();
+
+        if (initializedCards && cardControllers is { Count: > 0 })
+        {
+            if (showCards)
+            {
+                foreach (CardController cardController in cardControllers)
+                {
+                    CardData cardData = CardDatabase.Instance.Get(cardController.CardType);
+                    cardController.SetSprite(cardData.artwork);
+                }
+            }
+            else
+            {
+                foreach (CardController cardController in cardControllers)
+                {
+                    cardController.SetSprite(backFace);
+                }
+            }
+        }
     }
 
     private void OnEnable()
@@ -94,10 +130,13 @@ public class GamePlayer : MonoBehaviour
 
         handLayoutManager = new HandLayoutManager(cardControllers,
             cardPrefab.GetComponent<RectTransform>().rect.width,
-            ((RectTransform)cardContainer).rect.width);
+            ((RectTransform)cardContainer).rect.width, 
+            isLocal ? 160f : 30f);
         
         CreateHandCards();
         UpdatePlayButtonState();
+
+        initializedCards = true;
     }
     
     private void CreateHandCards()
@@ -193,7 +232,19 @@ public class GamePlayer : MonoBehaviour
     {
         CardData cardData = CardDatabase.Instance.Get(cardType);
         CardController cardController = Instantiate(cardPrefab, cardContainer);
-        cardController.Init(cardType, Guid.NewGuid(), cardData.artwork);
+        RectTransform cardRectTransform = cardController.GetComponent<RectTransform>();
+        if (isLocal)
+        {
+            cardRectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, localPlayerCardHeight);
+            cardRectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, localPlayerCardWidth);
+        }
+        else
+        {
+            cardRectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, remotePlayerCardHeight);
+            cardRectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, remotePlayerCardWidth);
+        }
+        
+        cardController.Init(cardType, Guid.NewGuid(), isLocal ? cardData.artwork : backFace, isLocal);
         cardController.OnClick += OnCardClicked;
         cardControllers.Add(cardController);
     }
@@ -250,6 +301,8 @@ public class GamePlayer : MonoBehaviour
                 (cardController.CardType, cardController.CardInstanceLocal)).ToList();
             GameController.Instance.LocalPlayerPlaysCards(actorNumber, tupleList, targetActorNumber);
         }
+        
+        selectedCards.Clear();
     }
 
     private Task<int> SelectTargetActorAsync()
@@ -269,6 +322,12 @@ public class GamePlayer : MonoBehaviour
 
     private void OnCardClicked(Guid selectedCardInstanceGuid, CardType selectedCardType)
     {
+        if (canSelectCardToGiveAway)
+        {
+            OnCardSelected?.Invoke(actorNumber, selectedCardInstanceGuid, selectedCardType);
+            return;
+        }
+        
         if (!GameController.Instance.TurnManager.IsMyTurn)
         {
             DeselectSelectedCards();
@@ -382,5 +441,27 @@ public class GamePlayer : MonoBehaviour
     public void HideSelectionUI()
     {
         selectButton.gameObject.SetActive(false);
+    }
+    
+    public async Task<(int, Guid, CardType)> RequestCardToGiveAsync()
+    {
+        Logger.Log($"{playerNameTextField.text} is asked to give a Favor card.");
+    
+        canSelectCardToGiveAway = true;
+        waitingForCardTask = new TaskCompletionSource<(int, Guid, CardType)>();
+
+        OnCardSelected += OnCardChosen;
+
+        (int, Guid, CardType) tuple = await waitingForCardTask.Task;
+
+        Logger.Log($"{playerNameTextField.text} selected {tuple.Item3} as favor card");
+        return tuple;
+    }
+    
+    private void OnCardChosen(int actorNum, Guid cardGuid, CardType cardType)
+    {
+        OnCardSelected -= OnCardChosen;
+        canSelectCardToGiveAway = false;
+        waitingForCardTask.TrySetResult((actorNum, cardGuid, cardType));
     }
 }
