@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 using Photon.Pun;
 using Photon.Realtime;
 using UnityEngine;
@@ -430,7 +431,7 @@ public class GameController : MonoBehaviourPun
     }
     
     // Play A Card
-    public void LocalPlayerPlaysCard(int actorNumber, CardType cardType, Guid cardLocalInstance, int targetActorNumber)
+    public async Task LocalPlayerPlaysCard(int actorNumber, CardType cardType, Guid cardLocalInstance, int targetActorNumber)
     {
         Logger.Log($"Normal Play: {actorIdToPhotonPlayerMap[actorNumber].NickName} plays {cardType}");
         
@@ -439,6 +440,11 @@ public class GameController : MonoBehaviourPun
         {
             Logger.Warning($"No handler for {cardType}");
             return;
+        }
+        
+        if (Utilites.DoesCardNeedToSelectTarget(cardType))
+        {
+            targetActorNumber = await actorIdToGamePlayerMap[actorNumber].SelectTargetActorAsync();
         }
         
         // Remove Card Locally
@@ -450,10 +456,12 @@ public class GameController : MonoBehaviourPun
         cardAction.Execute(actorNumber, targetActorNumber);
     }
     
-    public void LocalPlayerPlaysCards(int actorNumber, List<(CardType, Guid)> playedCards, int targetActorNumber)
+    public async Task LocalPlayerPlaysCards(int actorNumber, List<(CardType, Guid)> playedCards, int targetActorNumber)
     {
         Logger.Log($"Cat Combo Play: {actorIdToPhotonPlayerMap[actorNumber].NickName} plays " +
                    $"{playedCards[0].Item1} with {{playedCards.Count}} cards");
+        
+        targetActorNumber = await actorIdToGamePlayerMap[actorNumber].SelectTargetActorAsync();
         
         // Cat Cards
     }

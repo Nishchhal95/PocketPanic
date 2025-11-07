@@ -275,37 +275,29 @@ public class GamePlayer : MonoBehaviour
             return;
         }
 
-        _ = HandleCardPlayed();
+        HandleCardPlayed();
     }
 
-    private async Task HandleCardPlayed()
+    private void HandleCardPlayed()
     {
         int targetActorNumber = -1;
         if (selectedCards.Count == 1)
         {
             CardType playedCardType = selectedCards[0].CardType;
-
-            if (Utilites.DoesCardNeedToSelectTarget(playedCardType))
-            {
-                targetActorNumber = await SelectTargetActorAsync();
-            }
-
-            GameController.Instance.LocalPlayerPlaysCard(actorNumber, playedCardType, 
+            _ = GameController.Instance.LocalPlayerPlaysCard(actorNumber, playedCardType, 
                 selectedCards[0].CardInstanceLocal, targetActorNumber);
         }
         else
         {
-            targetActorNumber = await SelectTargetActorAsync();
-            
             List<(CardType, Guid)> tupleList = selectedCards.Select(cardController => 
                 (cardController.CardType, cardController.CardInstanceLocal)).ToList();
-            GameController.Instance.LocalPlayerPlaysCards(actorNumber, tupleList, targetActorNumber);
+            _ = GameController.Instance.LocalPlayerPlaysCards(actorNumber, tupleList, targetActorNumber);
         }
         
         selectedCards.Clear();
     }
 
-    private Task<int> SelectTargetActorAsync()
+    public Task<int> SelectTargetActorAsync()
     {
         if (isSelectingTarget)
         {
