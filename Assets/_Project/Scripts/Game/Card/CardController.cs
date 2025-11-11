@@ -9,22 +9,16 @@ public class CardController : MonoBehaviour, IPointerEnterHandler, IPointerExitH
     [SerializeField] private Image image;
     [field: SerializeField] public CardType CardType { get; private set; }
     [field: SerializeField] public Guid CardInstanceLocal { get; private set; }
+    [field: SerializeField] public RectTransform RectTransform { get; private set; }
+    [field: SerializeField] public Vector2 OriginalPos { get; private set; }
     
     [SerializeField] private float hoverMoveDistance = 100f;
     [SerializeField] private Vector3 selectedScale = new(1.2f, 1.2f, 1.2f);
     [SerializeField] private float tweenDuration = 0.25f;
 
     public event Action<Guid, CardType> OnClick;
-    
-    private RectTransform rectTransform;
-    private Vector2 originalPos;
     private bool isSelected;
     private bool isLocal;
-    
-    private void Awake()
-    {
-        rectTransform = GetComponent<RectTransform>();
-    }
 
     public void Init(CardType cardType, Guid cardInstanceLocal, Sprite sprite, bool isLocal)
     {
@@ -46,9 +40,9 @@ public class CardController : MonoBehaviour, IPointerEnterHandler, IPointerExitH
             return;
         }
         
-        rectTransform.DOKill(true);
-        rectTransform.localScale = Vector3.one;
-        rectTransform.DOScale(selectedScale, tweenDuration).SetEase(Ease.OutQuad);
+        RectTransform.DOKill(true);
+        RectTransform.localScale = Vector3.one;
+        RectTransform.DOScale(selectedScale, tweenDuration).SetEase(Ease.OutQuad);
     }
 
     public void OnPointerExit(PointerEventData eventData)
@@ -58,8 +52,8 @@ public class CardController : MonoBehaviour, IPointerEnterHandler, IPointerExitH
             return;
         }
         
-        rectTransform.DOKill(true);
-        rectTransform.DOScale(Vector3.one, tweenDuration).SetEase(Ease.OutQuad);
+        RectTransform.DOKill(true);
+        RectTransform.DOScale(Vector3.one, tweenDuration).SetEase(Ease.OutQuad);
     }
 
     public void OnPointerClick(PointerEventData eventData)
@@ -73,18 +67,18 @@ public class CardController : MonoBehaviour, IPointerEnterHandler, IPointerExitH
 
     public void SetPosition(Vector3 position)
     {
-        originalPos = position;
+        OriginalPos = position;
     }
 
     public void Select()
     {
         isSelected = true;
         
-        rectTransform.DOKill(true);
+        RectTransform.DOKill(true);
         DOTween.Sequence()
-            .Append(rectTransform.DOAnchorPos(originalPos + Vector2.up * hoverMoveDistance, tweenDuration)
+            .Append(RectTransform.DOAnchorPos(OriginalPos + Vector2.up * hoverMoveDistance, tweenDuration)
                 .SetEase(Ease.OutQuad))
-            .Join(rectTransform.DOScale(selectedScale, tweenDuration)
+            .Join(RectTransform.DOScale(selectedScale, tweenDuration)
                 .SetEase(Ease.OutQuad));
     }
 
@@ -92,8 +86,8 @@ public class CardController : MonoBehaviour, IPointerEnterHandler, IPointerExitH
     {
         isSelected = false;
         
-        rectTransform.DOKill(true);
-        DOTween.Sequence().Append(rectTransform.DOAnchorPos(originalPos, tweenDuration).SetEase(Ease.OutQuad))
-            .Join(rectTransform.DOScale(Vector3.one, tweenDuration).SetEase(Ease.OutQuad));
+        RectTransform.DOKill(true);
+        DOTween.Sequence().Append(RectTransform.DOAnchorPos(OriginalPos, tweenDuration).SetEase(Ease.OutQuad))
+            .Join(RectTransform.DOScale(Vector3.one, tweenDuration).SetEase(Ease.OutQuad));
     }
 }

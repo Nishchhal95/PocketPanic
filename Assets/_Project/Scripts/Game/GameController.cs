@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Photon.Pun;
 using Photon.Realtime;
+using Unity.VisualScripting;
 using UnityEngine;
 
 public class GameController : MonoBehaviourPun
@@ -15,6 +16,14 @@ public class GameController : MonoBehaviourPun
     [SerializeField] private GameCanvasController gameCanvasController;
     [SerializeField] private GamePlayer localGamePlayerPrefab;
     [SerializeField] private GamePlayer remoteGamePlayerPrefab;
+    [SerializeField] private CardController playerCardPrefab;
+    [SerializeField] private Sprite backCardFace;
+
+    [SerializeField] private float localPlayerCardWidth = 200f;
+    [SerializeField] private float localPlayerCardHeight = 300f;
+    
+    [SerializeField] private float remotePlayerCardWidth = 100f;
+    [SerializeField] private float remotePlayerCardHeight = 130f;
 
     // This is an ordered list by ActorNumber
     private Dictionary<int, Player> actorIdToPhotonPlayerMap = new();
@@ -22,6 +31,7 @@ public class GameController : MonoBehaviourPun
     private List<int> aliveActors;
 
     public TurnManager TurnManager { get; private set; }
+    public bool SetupCompleted { get; private set; } = false;
     [field: SerializeField] public NetworkManager NetworkManager { get; private set; }
 
     private GamePlayer testPlayer;
@@ -110,11 +120,11 @@ public class GameController : MonoBehaviourPun
                 CardType.Attack,
                 CardType.Attack
             };
-        // for (int j = 0; j < numberOfCards - 1; j++)
-        // {
-        //     cards.Add(deckController.DrawCardTop());
-        // }
-        testPlayer.InitCards(cards);
+
+        foreach (CardType card in cards)
+        {
+            testPlayer.AddCard(card);
+        }
     }
 
     public void TestAdd()
@@ -147,16 +157,15 @@ public class GameController : MonoBehaviourPun
     private void OnGameStarted(int seed1, int seed2)
     {
         GameEvents.RaiseGameStarted();
-        SetupGame(seed1, seed2);
+        _ = SetupGame(seed1, seed2);
     }
 
     private void OnCardDrawn(int actorNumber, int count, bool top)
     {
         if (deckController.IsDeckEmpty())
         {
-            Logger.Log("Draw Deck is Empty, creating new Deck from Played Cards");
-            deckController.CreateDeckFromPlayedCards();
-            Logger.Log("New Draw Deck Created");
+            Logger.Error("Draw Deck is Empty!");
+            return;
         }
 
         StartCoroutine(OnCardDrawRoutine(actorNumber, count, top));
@@ -203,14 +212,14 @@ public class GameController : MonoBehaviourPun
                     yield break;
                 }
                 
-                yield return StartCoroutine(HandleExplodingDrawnRoutine(actorNumber));
+                yield return StartCoroutine(HandleExplodingDrawnLocalRoutine(actorNumber));
             }
         }
         
         NetworkManager.SendEndTurn();
     }
 
-    private IEnumerator HandleExplodingDrawnRoutine(int actorNumber)
+    private IEnumerator HandleExplodingDrawnLocalRoutine(int actorNumber)
     {
         GamePlayer gamePlayer = actorIdToGamePlayerMap[actorNumber];
         bool hasDefuse = gamePlayer.HasCard(CardType.Defuse);
@@ -344,14 +353,14 @@ public class GameController : MonoBehaviourPun
 
     #endregion
     
-    private void SetupGame(int seedInitial, int seedFinal)
+    private async Task SetupGame(int seedInitial, int seedFinal)
     {
         deckController.BuildDeckWithoutExplodeAndDiffuse();
         deckController.Shuffle(seedInitial);
         
         SpawnPlayers();
         InitializeManagers();
-        DealCardsToPlayers();
+        await DealCardsToPlayers();
         
         deckController.AddExplode(PhotonNetworkController.GetPlayerCountInCurrentRoom());
         deckController.AddDefuse(2);
@@ -360,6 +369,7 @@ public class GameController : MonoBehaviourPun
         deckController.InsertCardAtIndex(CardType.Explode);
         
         TurnManager.EndTurn();
+        SetupCompleted = true;
     }
 
     private void SpawnPlayers()
@@ -385,19 +395,50 @@ public class GameController : MonoBehaviourPun
         }
     }
 
-    private void DealCardsToPlayers()
+    private async Task DealCardsToPlayers()
     {
         Player[] players = PhotonNetworkController.GetPlayersCurrentRoom();
 
         foreach (Player player in players)
         {
-            List<CardType> cards = new List<CardType>(8) { CardType.Defuse };
-            for (int j = 0; j < 7; j++)
+            GamePlayer currentPlayer = actorIdToGamePlayerMap[player.ActorNumber];
+            Player photonPlayer = actorIdToPhotonPlayerMap[player.ActorNumber];
+            
+            // Adding first as Defuse and then the rest of the cards
+            for (int j = 0; j < 8; j++)
             {
-                cards.Add(deckController.DrawCardTop());
+                CardType currentCard = j == 0 ? CardType.Defuse : deckController.DrawCardTop();
+                
+                CardController currentCardController = CreateCardController(currentCard,
+                    currentPlayer.CardContainer, photonPlayer.IsLocal);
+                await CardAnimationController.AnimateCardToAnchored(currentCardController, 
+                    currentPlayer.HandLayoutManager.GetNextCardPosition(), 
+                    GameConfig.ANIMATION_DEAL_CARD_DURATION);
+                currentPlayer.AddCard(currentCardController);
             }
-            actorIdToGamePlayerMap[player.ActorNumber].InitCards(cards);
         }
+    }
+
+    private CardController CreateCardController(CardType cardType, Transform parent, bool isLocal)
+    {
+        CardData cardData = CardDatabase.Instance.Get(cardType);
+        CardController cardController = Instantiate(playerCardPrefab, gameCanvasController.CardDeckTransform);
+        RectTransform cardRectTransform = cardController.RectTransform;
+        cardRectTransform.SetParent(parent, true);
+        cardRectTransform.name = $"{cardType.ToString()}";
+        if (isLocal)
+        {
+            cardRectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, localPlayerCardHeight);
+            cardRectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, localPlayerCardWidth);
+        }
+        else
+        {
+            cardRectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, remotePlayerCardHeight);
+            cardRectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, remotePlayerCardWidth);
+        }
+        
+        cardController.Init(cardType, Guid.NewGuid(), isLocal ? cardData.artwork : backCardFace, isLocal);
+        return cardController;
     }
 
     private void OnCardSelected(int actorNumber, Guid cardInstanceId, CardType cardType)

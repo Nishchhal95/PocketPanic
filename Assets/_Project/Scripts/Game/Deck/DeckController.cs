@@ -4,11 +4,9 @@ using UnityEngine;
 public class DeckController : MonoBehaviour
 {
     [SerializeField] private DeckConfig deckConfig;
-
+    
     private List<CardType> drawDeck = new();
     private List<CardType> playedCardsDeck = new();
-
-    private int recreatedDeckShuffleSeed = 25;
 
     public void BuildDeckWithoutExplodeAndDiffuse()
     {
@@ -117,14 +115,5 @@ public class DeckController : MonoBehaviour
     public bool IsDeckEmpty()
     {
         return drawDeck.Count == 0;
-    }
-
-    public void CreateDeckFromPlayedCards()
-    {
-        drawDeck = playedCardsDeck;
-        Logger.Log($"CreateDeckFromPlayedCards -> {string.Join(", ", drawDeck)}" );
-        Shuffle(recreatedDeckShuffleSeed);
-        Logger.Log($"CreateDeckFromPlayedCards After Shuffle -> {string.Join(", ", drawDeck)}" );
-        playedCardsDeck.Clear();
     }
 }

@@ -7,7 +7,6 @@ using UnityEngine;
 public class HandLayoutManager
 {
     [SerializeField] private float cardSpacing = 160f;
-    [SerializeField] private float moveDuration = 0.3f;
     [SerializeField] private float padding = 20f;
 
     private List<CardController> cardControllers;
@@ -46,12 +45,29 @@ public class HandLayoutManager
         for (int i = 0; i < count; i++)
         {
             float xPos = startX + i * spacing;
-
-            RectTransform rect = cardControllers[i].GetComponent<RectTransform>();
+            
+            RectTransform rect = cardControllers[i].RectTransform;
+            rect.DOAnchorPos(new Vector2(xPos, 0), GameConfig.ANIMATION_HAND_ADJUST_DURATION).SetEase(Ease.OutQuad);
             cardControllers[i].SetPosition(new Vector2(xPos, 0));
-            rect.DOAnchorPos(new Vector2(xPos, 0), moveDuration).SetEase(Ease.OutQuad);
             cardControllers[i].transform.SetSiblingIndex(i);
+
         }
+    }
+    
+    public Vector2 GetNextCardPosition()
+    {
+        if (!initialized)
+        {
+            return Vector2.zero;
+        }
+
+        int count = cardControllers.Count + 1;
+        float spacing = GetValidCardSpacing();
+        float totalWidth = (count - 1) * spacing;
+        float startX = -totalWidth / 2f;
+        float xPos = startX + (count - 1) * spacing;
+
+        return new Vector2(xPos, 0);
     }
     
     private float GetValidCardSpacing()

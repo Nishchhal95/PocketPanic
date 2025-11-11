@@ -127,11 +127,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 9bb999f80d607ed4481b9327ddd616d4, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::GamePlayer
+  <CardContainer>k__BackingField: {fileID: 6999401975086372305}
   playerNameTextField: {fileID: 8009545611197441425}
   playCardButton: {fileID: 0}
   selectButton: {fileID: 6637537104329796996}
   cardPrefab: {fileID: 2096285572926295826, guid: c9a8cffe52cb55147ae52f9f190d7bd3, type: 3}
-  cardContainer: {fileID: 6999401975086372305}
   backFace: {fileID: 8957324059118975939, guid: 6a51ea6a0c2a29444803b3654b07f41b, type: 3}
   actorNumber: 0
   userId: 

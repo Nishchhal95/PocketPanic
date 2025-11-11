@@ -51,6 +51,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::HandCardController
   image: {fileID: 6810919315803887193}
   <CardType>k__BackingField: 0
+  <RectTransform>k__BackingField: {fileID: 8237692938539145492}
+  hoverMoveDistance: 100
+  selectedScale: {x: 1.2, y: 1.2, z: 1.2}
+  tweenDuration: 0.25
 --- !u!1 &6902782542725189174
 GameObject:
   m_ObjectHideFlags: 0

@@ -419,11 +419,15 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 9bb999f80d607ed4481b9327ddd616d4, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::GamePlayer
+  <CardContainer>k__BackingField: {fileID: 4543536943824104949}
+  <HandLayoutManager>k__BackingField:
+    cardSpacing: 0
+    moveDuration: 2
+    padding: 0
   playerNameTextField: {fileID: 5791025056615222340}
   playCardButton: {fileID: 3160849115504622240}
   selectButton: {fileID: 0}
   cardPrefab: {fileID: 2096285572926295826, guid: c9a8cffe52cb55147ae52f9f190d7bd3, type: 3}
-  cardContainer: {fileID: 4543536943824104949}
   backFace: {fileID: 8957324059118975939, guid: 6a51ea6a0c2a29444803b3654b07f41b, type: 3}
   actorNumber: 0
   userId: 
@@ -431,10 +435,7 @@ MonoBehaviour:
   localPlayerCardHeight: 300
   remotePlayerCardWidth: 100
   remotePlayerCardHeight: 130
-  handLayoutManager:
-    cardSpacing: 0
-    moveDuration: 0
-    padding: 0
+  showCards: 0
 --- !u!1 &7387403664462672270
 GameObject:
   m_ObjectHideFlags: 0

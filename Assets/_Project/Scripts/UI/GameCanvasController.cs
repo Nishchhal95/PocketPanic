@@ -10,6 +10,7 @@ public class GameCanvasController : MonoBehaviour
     
     [SerializeField] private TMP_Text currentTurnNameIndicatorTextField;
     [SerializeField] private Button cardDeckButton;
+    [field: SerializeField] public Transform CardDeckTransform { get; private set; }
     
     [SerializeField] private ShowTheFutureUIController showTheFutureUI;
     
