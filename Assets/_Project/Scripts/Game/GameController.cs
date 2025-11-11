@@ -168,10 +168,10 @@ public class GameController : MonoBehaviourPun
             return;
         }
 
-        StartCoroutine(OnCardDrawRoutine(actorNumber, count, top));
+        _ = OnCardDrawAsync(actorNumber, count, top);
     }
     
-    private IEnumerator OnCardDrawRoutine(int actorNumber, int count, bool top)
+    private async Task OnCardDrawAsync(int actorNumber, int count, bool top)
     {
         /* So why do I do this (Why do I draw cards first and loop again to check if I draw an Explode?)
         This is because there could be a case when I draw 2 cards,
@@ -182,21 +182,26 @@ public class GameController : MonoBehaviourPun
         for (int i = 0; i < count; i++)
         {
             GamePlayer gamePlayer = actorIdToGamePlayerMap[actorNumber];
+            Player photonPlayer = actorIdToPhotonPlayerMap[actorNumber];
 
             CardType drawnCard = top ? deckController.DrawCardTop() : deckController.DrawCardBottom();
+            
+            CardController cardController = await CreateAndDealCardToPlayer(drawnCard, gamePlayer, 
+                photonPlayer.IsLocal);
+            gamePlayer.AddCard(cardController);
+            
             cardsDrawn[i] = drawnCard;
-            gamePlayer.AddCard(drawnCard);
-
+            
             if (count > 1)
             {
-                yield return new WaitForSecondsRealtime(1f);
+                await Task.Delay(TimeSpan.FromSeconds(1f));
             }
         }
 
         if (!cardsDrawn.Contains(CardType.Explode))
         {
             OnEndTurn();
-            yield break;
+            return;
         }
         
         for (int i = 0; i < cardsDrawn.Length; i++)
@@ -209,27 +214,27 @@ public class GameController : MonoBehaviourPun
                 // Handle Explode locally for Player
                 if (!TurnManager.IsMyTurn)
                 {
-                    yield break;
+                    return;
                 }
-                
-                yield return StartCoroutine(HandleExplodingDrawnLocalRoutine(actorNumber));
+
+                await HandleExplodingDrawnLocalAsync(actorNumber);
             }
         }
         
         NetworkManager.SendEndTurn();
     }
 
-    private IEnumerator HandleExplodingDrawnLocalRoutine(int actorNumber)
+    private async Task HandleExplodingDrawnLocalAsync(int actorNumber)
     {
         GamePlayer gamePlayer = actorIdToGamePlayerMap[actorNumber];
         bool hasDefuse = gamePlayer.HasCard(CardType.Defuse);
-        
-        yield return new WaitForSecondsRealtime(1f);
+
+        await Task.Delay(TimeSpan.FromSeconds(1f));
 
         if (hasDefuse)
         {
             Logger.Log("Placing Explode back in the Deck");
-            yield return new WaitForSecondsRealtime(1f);
+            await Task.Delay(TimeSpan.FromSeconds(1f));
             int explodeIndex = 1;
             NetworkManager.SendDefuseUsed(actorNumber, explodeIndex);
         }
@@ -408,21 +413,28 @@ public class GameController : MonoBehaviourPun
             for (int j = 0; j < 8; j++)
             {
                 CardType currentCard = j == 0 ? CardType.Defuse : deckController.DrawCardTop();
-                
-                CardController currentCardController = CreateCardController(currentCard,
-                    currentPlayer.CardContainer, photonPlayer.IsLocal);
-                await CardAnimationController.AnimateCardToAnchored(currentCardController, 
-                    currentPlayer.HandLayoutManager.GetNextCardPosition(), 
-                    GameConfig.ANIMATION_DEAL_CARD_DURATION);
-                currentPlayer.AddCard(currentCardController);
+
+                CardController cardController = await CreateAndDealCardToPlayer(currentCard, currentPlayer, 
+                    photonPlayer.IsLocal);
+                currentPlayer.AddCard(cardController);
             }
         }
     }
 
-    private CardController CreateCardController(CardType cardType, Transform parent, bool isLocal)
+    private async Task<CardController> CreateAndDealCardToPlayer(CardType cardType, GamePlayer gamePlayer, bool isLocal)
+    {
+        CardController currentCardController = CreateCardController(cardType,
+            gamePlayer.CardContainer, gameCanvasController.CardDeckTransform, isLocal);
+        await CardAnimationController.AnimateCardToAnchored(currentCardController, 
+            gamePlayer.HandLayoutManager.GetNextCardPosition(), 
+            GameConfig.ANIMATION_DEAL_CARD_DURATION);
+        return currentCardController;
+    }
+
+    private CardController CreateCardController(CardType cardType, Transform parent, Transform deckTransform, bool isLocal)
     {
         CardData cardData = CardDatabase.Instance.Get(cardType);
-        CardController cardController = Instantiate(playerCardPrefab, gameCanvasController.CardDeckTransform);
+        CardController cardController = Instantiate(playerCardPrefab, deckTransform);
         RectTransform cardRectTransform = cardController.RectTransform;
         cardRectTransform.SetParent(parent, true);
         cardRectTransform.name = $"{cardType.ToString()}";
