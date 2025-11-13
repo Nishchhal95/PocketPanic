@@ -58,15 +58,14 @@ public class GamePlayer : MonoBehaviour
             {
                 foreach (CardController cardController in cardControllers)
                 {
-                    CardData cardData = CardDatabase.Instance.Get(cardController.CardType);
-                    cardController.SetSprite(cardData.artwork);
+                    cardController.FaceUp();
                 }
             }
             else
             {
                 foreach (CardController cardController in cardControllers)
                 {
-                    cardController.SetSprite(backFace);
+                    cardController.FaceDown();
                 }
             }
         }
@@ -156,6 +155,16 @@ public class GamePlayer : MonoBehaviour
         return cards[index];
     }
     
+    public CardController GetCardController(Guid cardLocalInstanceId)
+    {
+        return cardControllers.Find(x => x.CardInstanceLocal.Equals(cardLocalInstanceId));
+    }
+    
+    public CardController GetCardController(CardType cardType)
+    {
+        return cardControllers.First(x => x.CardType.Equals(cardType));
+    }
+    
     public bool HasCard(CardType cardType)
     {
         return cards.Contains(cardType);
@@ -174,7 +183,6 @@ public class GamePlayer : MonoBehaviour
         CardController cardController = cardControllers[index];
         cardController.OnClick -= OnCardClicked;
         cardControllers.RemoveAt(index);
-        Destroy(cardController.gameObject);
 
         DeselectSelectedCards();
         HandLayoutManager.UpdateHandLayout();
@@ -193,7 +201,6 @@ public class GamePlayer : MonoBehaviour
         CardController cardController = cardControllers[index];
         cardController.OnClick -= OnCardClicked;
         cardControllers.RemoveAt(index);
-        Destroy(cardController.gameObject);
 
         DeselectSelectedCards();
         HandLayoutManager.UpdateHandLayout();
@@ -235,7 +242,8 @@ public class GamePlayer : MonoBehaviour
             cardRectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, remotePlayerCardWidth);
         }
         
-        cardController.Init(cardType, Guid.NewGuid(), isLocal ? cardData.artwork : backFace, isLocal);
+        cardController.Init(new CardRuntimeData(cardType, Guid.NewGuid(), cardData.artwork, backFace, 
+            isLocal, localPlayerCardWidth, localPlayerCardHeight, remotePlayerCardWidth, remotePlayerCardHeight));
         cardController.OnClick += OnCardClicked;
         cardControllers.Add(cardController);
     }

@@ -9,4 +9,5 @@ public static class GameConfig
     
     public const float ANIMATION_HAND_ADJUST_DURATION = 0.3f;
     public const float ANIMATION_DEAL_CARD_DURATION = 0.3f;
+    public const float ANIMATION_PLAY_CARD_DURATION = 0.3f;
 }

@@ -255,14 +255,30 @@ public class GameController : MonoBehaviourPun
         TurnManager.SetActorsTurn(actorTurn);
     }
 
-    private void OnDefuseUsed(int actorNumber, int explodeIndex)
+    private void OnDefuseUsed(int actorNumber, int newExplodeIndex)
     {
-        // Need to Play
         GamePlayer gamePlayer = actorIdToGamePlayerMap[actorNumber];
-        gamePlayer.RemoveCard(CardType.Explode);
+        _ = OnDefuseUsedAsync(gamePlayer, newExplodeIndex);
+    }
+
+    private async Task OnDefuseUsedAsync(GamePlayer gamePlayer, int newExplodeIndex)
+    {
+        // Play Defuse (Move it to Discard Deck)
+        CardController defuseCardController = gamePlayer.GetCardController(CardType.Defuse);
+        defuseCardController.FaceUp();
+        defuseCardController.SetCardSizeFull();
+        await MoveCardToDiscardDeck(defuseCardController);
         gamePlayer.RemoveCard(CardType.Defuse);
+        
+        // Play Explode (Move it to Draw Deck)
+        CardController explodeCardController = gamePlayer.GetCardController(CardType.Explode);
+        explodeCardController.FaceUp();
+        explodeCardController.SetCardSizeFull();
+        await MoveCardToDrawDeck(explodeCardController);
+        gamePlayer.RemoveCard(CardType.Explode);
+        Destroy(explodeCardController.gameObject);
                 
-        deckController.InsertCardAtIndex(CardType.Explode, explodeIndex);
+        deckController.InsertCardAtIndex(CardType.Explode, newExplodeIndex);
     }
 
     private void OnPlayerExploded(int actorNumber)
@@ -279,8 +295,18 @@ public class GameController : MonoBehaviourPun
             return;
         }
 
+        _ = OnActionCardPlayedForRemotePlayer(actorNumber, cardTypeInt);
+    }
+
+    private async Task OnActionCardPlayedForRemotePlayer(int actorNumber, int cardTypeInt)
+    {
         GamePlayer gamePlayer = actorIdToGamePlayerMap[actorNumber];
         CardType cardType = (CardType)cardTypeInt;
+        
+        CardController playedCardController = gamePlayer.GetCardController(cardType);
+        playedCardController.FaceUp();
+        playedCardController.SetCardSizeFull();
+        await MoveCardToDiscardDeck(playedCardController);
         gamePlayer.RemoveCard(cardType);
         
         deckController.PlayCard(cardType);
@@ -424,7 +450,7 @@ public class GameController : MonoBehaviourPun
     private async Task<CardController> CreateAndDealCardToPlayer(CardType cardType, GamePlayer gamePlayer, bool isLocal)
     {
         CardController currentCardController = CreateCardController(cardType,
-            gamePlayer.CardContainer, gameCanvasController.CardDeckTransform, isLocal);
+            gamePlayer.CardContainer, gameCanvasController.DrawDeckTransform, isLocal);
         await CardAnimationController.AnimateCardToAnchored(currentCardController, 
             gamePlayer.HandLayoutManager.GetNextCardPosition(), 
             GameConfig.ANIMATION_DEAL_CARD_DURATION);
@@ -438,18 +464,18 @@ public class GameController : MonoBehaviourPun
         RectTransform cardRectTransform = cardController.RectTransform;
         cardRectTransform.SetParent(parent, true);
         cardRectTransform.name = $"{cardType.ToString()}";
+        cardController.Init(new CardRuntimeData(cardType, Guid.NewGuid(), cardData.artwork, backCardFace, 
+            isLocal, localPlayerCardWidth, localPlayerCardHeight, remotePlayerCardWidth, remotePlayerCardHeight));
+        
         if (isLocal)
         {
-            cardRectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, localPlayerCardHeight);
-            cardRectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, localPlayerCardWidth);
+            cardController.SetCardSizeFull();
         }
         else
         {
-            cardRectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, remotePlayerCardHeight);
-            cardRectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, remotePlayerCardWidth);
+            cardController.SetCardSizeSmall();
         }
         
-        cardController.Init(cardType, Guid.NewGuid(), isLocal ? cardData.artwork : backCardFace, isLocal);
         return cardController;
     }
 
@@ -486,7 +512,10 @@ public class GameController : MonoBehaviourPun
     // Play A Card
     public async Task LocalPlayerPlaysCard(int actorNumber, CardType cardType, Guid cardLocalInstance, int targetActorNumber)
     {
-        Logger.Log($"Normal Play: {actorIdToPhotonPlayerMap[actorNumber].NickName} plays {cardType}");
+        GamePlayer currentGamePlayer = actorIdToGamePlayerMap[actorNumber];
+        Player currentPhotonPlayer = actorIdToPhotonPlayerMap[actorNumber];
+        
+        Logger.Log($"Normal Play: {currentPhotonPlayer.NickName} plays {cardType}");
         
         CardAction cardAction = CardActionFactory.Get(cardType);
         if (cardAction == null)
@@ -495,17 +524,22 @@ public class GameController : MonoBehaviourPun
             return;
         }
         
-        if (Utilites.DoesCardNeedToSelectTarget(cardType))
-        {
-            targetActorNumber = await actorIdToGamePlayerMap[actorNumber].SelectTargetActorAsync();
-        }
+        // Network Call To Send Played CardAction
+        NetworkManager.SendPlayActionCard(actorNumber, (int)cardType);
+        
+        // Animate Card from Player to Discard Deck
+        await MoveCardToDiscardDeck(currentGamePlayer.GetCardController(cardLocalInstance));
         
         // Remove Card Locally
-        actorIdToGamePlayerMap[actorNumber].RemoveCard(cardLocalInstance);
+        currentGamePlayer.RemoveCard(cardLocalInstance);
         
-        // Network Call
-        NetworkManager.SendPlayActionCard(actorNumber, (int)cardType);
+        // If the card needs to select a Target
+        if (Utilites.DoesCardNeedToSelectTarget(cardType))
+        {
+            targetActorNumber = await currentGamePlayer.SelectTargetActorAsync();
+        }
 
+        // Execute the card and perform a Network call if needed based on the Card Played
         cardAction.Execute(actorNumber, targetActorNumber);
     }
     
@@ -655,5 +689,23 @@ public class GameController : MonoBehaviourPun
             GamePlayer gamePlayer = actorIdToGamePlayerMap[player.ActorNumber];
             gamePlayer.HideSelectionUI();
         }
+    }
+
+    private async Task MoveCardToDiscardDeck(CardController cardController)
+    {
+        await CardAnimationController.AnimateCardToPositionWithRandomRotation(cardController,
+            gameCanvasController.DiscardDeckTransform.position, GameConfig.ANIMATION_PLAY_CARD_DURATION);
+        
+        cardController.RectTransform.SetParent(gameCanvasController.DiscardDeckTransform);
+        cardController.RectTransform.localPosition = Vector3.zero;
+    }
+    
+    private async Task MoveCardToDrawDeck(CardController cardController)
+    {
+        await CardAnimationController.AnimateCardToPosition(cardController,
+            gameCanvasController.DrawDeckTransform.position, GameConfig.ANIMATION_PLAY_CARD_DURATION);
+        
+        cardController.RectTransform.SetParent(gameCanvasController.DrawDeckTransform);
+        cardController.RectTransform.localPosition = Vector3.zero;
     }
 }

@@ -9,8 +9,9 @@ public class GameCanvasController : MonoBehaviour
     public event Action CardDeckClicked;
     
     [SerializeField] private TMP_Text currentTurnNameIndicatorTextField;
-    [SerializeField] private Button cardDeckButton;
-    [field: SerializeField] public Transform CardDeckTransform { get; private set; }
+    [SerializeField] private Button drawDeckButton;
+    [field: SerializeField] public RectTransform DrawDeckTransform { get; private set; }
+    [field: SerializeField] public RectTransform DiscardDeckTransform { get; private set; }
     
     [SerializeField] private ShowTheFutureUIController showTheFutureUI;
     
@@ -19,12 +20,12 @@ public class GameCanvasController : MonoBehaviour
 
     private void OnEnable()
     {
-        cardDeckButton.onClick.AddListener(OnCardDeckClicked);
+        drawDeckButton.onClick.AddListener(OnCardDeckClicked);
     }
 
     private void OnDisable()
     {
-        cardDeckButton.onClick.RemoveListener(OnCardDeckClicked);
+        drawDeckButton.onClick.RemoveListener(OnCardDeckClicked);
     }
 
     private void OnCardDeckClicked()
@@ -34,8 +35,8 @@ public class GameCanvasController : MonoBehaviour
 
     public void UpdateTurn(string playerName)
     {
-        currentTurnNameIndicatorTextField.SetText(playerName);
-        cardDeckButton.interactable = GameController.Instance.TurnManager.IsMyTurn;
+        currentTurnNameIndicatorTextField.SetText($"Current Turn -> <color=green>{playerName}</color>");
+        drawDeckButton.interactable = GameController.Instance.TurnManager.IsMyTurn;
     }
 
     public void ShowTheFutureUI(DeckController deckController, int count)

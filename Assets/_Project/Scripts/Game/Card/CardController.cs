@@ -16,23 +16,58 @@ public class CardController : MonoBehaviour, IPointerEnterHandler, IPointerExitH
     [SerializeField] private Vector3 selectedScale = new(1.2f, 1.2f, 1.2f);
     [SerializeField] private float tweenDuration = 0.25f;
 
+    [SerializeField] private Sprite faceUpSprite;
+    [SerializeField] private Sprite faceDownSprite;
+
+    private float fullCardWidth;
+    private float fullCardHeight;
+    
+    private float smallCardWidth;
+    private float smallCardHeight;
+
     public event Action<Guid, CardType> OnClick;
     private bool isSelected;
     private bool isLocal;
 
-    public void Init(CardType cardType, Guid cardInstanceLocal, Sprite sprite, bool isLocal)
+    public void Init(CardRuntimeData cardRuntimeData)
     {
-        CardType = cardType;
-        CardInstanceLocal = cardInstanceLocal;
-        image.sprite = sprite;
-        this.isLocal = isLocal;
+        CardType = cardRuntimeData.CardType;
+        CardInstanceLocal = cardRuntimeData.CardLocalGuid;
+        faceUpSprite = cardRuntimeData.FaceUpSprite;
+        faceDownSprite = cardRuntimeData.FaceDownSprite;
+        isLocal = cardRuntimeData.IsLocal;
+
+        fullCardWidth = cardRuntimeData.FullCardWidth;
+        fullCardHeight = cardRuntimeData.FullCardHeight;
+        
+        smallCardWidth = cardRuntimeData.SmallCardWidth;
+        smallCardHeight = cardRuntimeData.SmallCardHeight;
+
+        image.sprite = isLocal ? faceUpSprite : faceDownSprite;
     }
 
-    public void SetSprite(Sprite sprite)
+    public void FaceUp()
     {
-        image.sprite = sprite;
+        image.sprite = faceUpSprite;
     }
 
+    public void FaceDown()
+    {
+        image.sprite = faceDownSprite;
+    }
+
+    public void SetCardSizeFull()
+    {
+        RectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, fullCardHeight);
+        RectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, fullCardWidth);
+    }
+
+    public void SetCardSizeSmall()
+    {
+        RectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, smallCardHeight);
+        RectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, smallCardWidth);
+    }
+    
     public void OnPointerEnter(PointerEventData eventData)
     {       
         if (!isLocal || isSelected)
@@ -89,5 +124,32 @@ public class CardController : MonoBehaviour, IPointerEnterHandler, IPointerExitH
         RectTransform.DOKill(true);
         DOTween.Sequence().Append(RectTransform.DOAnchorPos(OriginalPos, tweenDuration).SetEase(Ease.OutQuad))
             .Join(RectTransform.DOScale(Vector3.one, tweenDuration).SetEase(Ease.OutQuad));
+    }
+}
+
+public class CardRuntimeData
+{
+    public CardType CardType;
+    public Guid CardLocalGuid;
+    public Sprite FaceUpSprite;
+    public Sprite FaceDownSprite;
+    public bool IsLocal;
+    public float FullCardWidth;
+    public float FullCardHeight;
+    public float SmallCardWidth;
+    public float SmallCardHeight;
+
+    public CardRuntimeData(CardType cardType, Guid cardLocalGuid, Sprite faceUpSprite, Sprite faceDownSprite, 
+        bool isLocal, float fullCardWidth, float fullCardHeight, float smallCardWidth, float smallCardHeight)
+    {
+        CardType = cardType;
+        CardLocalGuid = cardLocalGuid;
+        FaceUpSprite = faceUpSprite;
+        FaceDownSprite = faceDownSprite;
+        IsLocal = isLocal;
+        FullCardWidth = fullCardWidth;
+        FullCardHeight = fullCardHeight;
+        SmallCardWidth = smallCardWidth;
+        SmallCardHeight = smallCardHeight;
     }
 }
