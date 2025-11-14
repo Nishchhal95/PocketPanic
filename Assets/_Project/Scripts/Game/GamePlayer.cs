@@ -19,6 +19,7 @@ public class GamePlayer : MonoBehaviour
     [SerializeField] private Button selectButton;
     [SerializeField] private CardController cardPrefab;
     [SerializeField] private Sprite backFace;
+    [SerializeField] private Image turnFillImage;
     [SerializeField] private int actorNumber;
     [SerializeField] private string userId;
 
@@ -476,5 +477,21 @@ public class GamePlayer : MonoBehaviour
         OnCardSelected -= OnCardChosen;
         canSelectCardToGiveAway = false;
         waitingForCardTask.TrySetResult((actorNum, cardGuid, cardType));
+    }
+
+    public void StartTurn()
+    {
+        turnFillImage.gameObject.SetActive(true);
+        turnFillImage.fillAmount = 1;
+    }
+    
+    public void UpdateTurnTime(float value)
+    {
+        turnFillImage.fillAmount = value;
+    }
+    
+    public void EndTurn()
+    {
+        turnFillImage.gameObject.SetActive(false);
     }
 }
