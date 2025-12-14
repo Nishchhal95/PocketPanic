@@ -14,6 +14,7 @@ public class GameCanvasController : MonoBehaviour
     [field: SerializeField] public RectTransform DiscardDeckTransform { get; private set; }
     
     [SerializeField] private ShowTheFutureUIController showTheFutureUI;
+    [SerializeField] private PlaceExplodeBackUIController placeExplodeBackUI;
     
     // 1 Player cannot Play alone and Max is 10
     [field: SerializeField] public PlayerCountToSlots[] PlayerCountToSlotsArray { get; private set; } = new PlayerCountToSlots[9];
@@ -47,5 +48,10 @@ public class GameCanvasController : MonoBehaviour
     public void AlterTheFutureUI(DeckController deckController, int count, Action<List<CardType>> onConfirm = null)
     {
         showTheFutureUI.Init(deckController, count, FutureViewMode.AlterFuture, onConfirm);
+    }
+
+    public void ShowPlaceExplodeBackUI(int maxValue, float timerDuration, Action<int> onConfirm)
+    {
+        placeExplodeBackUI.Init(maxValue, timerDuration, onConfirm);
     }
 }

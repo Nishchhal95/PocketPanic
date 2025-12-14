@@ -29,15 +29,18 @@ public class ShowTheFutureUIController : MonoBehaviour
             CardData data = CardDatabase.Instance.Get(cardType);
 
             var card = Instantiate(futureCardPrefab, container);
-            card.Init(data.artwork, cardType, mode == FutureViewMode.AlterFuture, this);
+            card.Init(data.artwork, cardType, mode == FutureViewMode.AlterFuture, i, this);
             card.SetTargetPosition(startX + spacing * i, 0);
             cardViews.Add(card);
         }
 
         confirmButton.gameObject.SetActive(mode == FutureViewMode.AlterFuture);
         cancelButton.gameObject.SetActive(true);
-
+        
+        confirmButton.onClick.RemoveListener(OnConfirm);
         confirmButton.onClick.AddListener(OnConfirm);
+        
+        cancelButton.onClick.RemoveListener(Close);
         cancelButton.onClick.AddListener(Close);
     }
 

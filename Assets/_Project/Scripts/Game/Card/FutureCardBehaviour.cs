@@ -24,12 +24,13 @@ public class FutureCardBehaviour : MonoBehaviour, IBeginDragHandler, IDragHandle
         RectTransform = GetComponent<RectTransform>();
     }
 
-    public void Init(Sprite sprite, CardType cardType, bool draggable, ShowTheFutureUIController controller)
+    public void Init(Sprite sprite, CardType cardType, bool draggable, int index ,ShowTheFutureUIController controller)
     {
         cardImage.sprite = sprite;
-        this.CardType = cardType;
+        CardType = cardType;
         this.draggable = draggable;
         this.controller = controller;
+        cardPlaceText.SetText($"Place: {index + 1}");
         cardPlaceText.gameObject.SetActive(!draggable);
     }
 

@@ -1,15 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
 using Photon.Realtime;
 using UnityEngine;
 
-public class TurnManager
+public class TurnManager : IDisposable
 {
-    private const float TURN_DURATION = 10f;
-    private const float PLACE_EXPLODE_BACK_DURATION = 10f;
     public int CurrentTurn
     {
         get => currentTurn;
@@ -26,7 +22,7 @@ public class TurnManager
     private GameCanvasController gameCanvasController;
     private Action onTurnTimeEnded;
 
-    private CancellationTokenSource turnTimerCancellationTokenSource;
+    private GameSyncTimer turnTimer;
 
     public TurnManager(Player[] currentRoomPlayers, Dictionary<int, GamePlayer> actorIdToGamePlayerMap, 
         GameCanvasController gameCanvasController, Action onTurnTimeEnded)
@@ -39,8 +35,7 @@ public class TurnManager
 
     public void Dispose()
     {
-        turnTimerCancellationTokenSource?.Cancel();
-        turnTimerCancellationTokenSource?.Dispose();
+        turnTimer?.Dispose();
     }
 
     public void MarkDead(int actorNumber)
@@ -57,6 +52,7 @@ public class TurnManager
     
     public void EndTurn()
     {
+        Debug.Log("<<<<<<<EndTurn");
         if (currentTurn >= 0)
         {
             Logger.Log($"Turn Ended for {GetPhotonPlayerForCurrentTurn().NickName}");
@@ -98,17 +94,23 @@ public class TurnManager
         return actorIdToGamePlayerMap[currentTurnPlayerActorNumber];
     }
 
-    public void StopTurnTimer()
+    public void PauseTimer()
     {
-        turnTimerCancellationTokenSource?.Cancel();
+        turnTimer?.Pause();
+    }
+
+    public void ResumeTimer()
+    {
+        turnTimer.Resume();
+    }
+
+    public void RestartTimer()
+    {
+        turnTimer.Restart();
     }
 
     private void UpdateTurnUI()
     {
-        turnTimerCancellationTokenSource?.Cancel();
-        turnTimerCancellationTokenSource?.Dispose();
-        turnTimerCancellationTokenSource = new CancellationTokenSource();
-        
         foreach (GamePlayer gamePlayer in actorIdToGamePlayerMap.Values)
         {
             gamePlayer.EndTurn();
@@ -116,76 +118,23 @@ public class TurnManager
         GamePlayer currentTurnGamePlayer = GetGamePlayerForCurrentTurn();
         currentTurnGamePlayer.StartTurn();
 
-        _ = StartTurnTimerAsync(turnTimerCancellationTokenSource.Token);
-        
+        turnTimer?.Dispose();
+        turnTimer = new GameSyncTimer(GameConfig.TURN_DURATION, UpdateGameTimerForTurnPlayer, 
+            OnTimerComplete, null);
+        _ = turnTimer.Start();
         gameCanvasController.UpdateTurn(GetPhotonPlayerForCurrentTurn().NickName);
     }
 
-    private async Task StartTurnTimerAsync(CancellationToken token)
+    private void UpdateGameTimerForTurnPlayer(float remaining, float progress)
     {
-        double turnEndTime = PhotonNetworkController.GetPhotonTime() + TURN_DURATION;
-        Logger.Log($"{GetPhotonPlayerForCurrentTurn().NickName} Turn Starting at {PhotonNetworkController.GetPhotonTime()} and ending at {turnEndTime}");
-
-        try
-        {
-            while (PhotonNetworkController.GetPhotonTime() < turnEndTime)
-            {
-                token.ThrowIfCancellationRequested();
-
-                float remaining = (float)(turnEndTime - PhotonNetworkController.GetPhotonTime());
-                float progress = Mathf.Clamp01(remaining / TURN_DURATION);
-                GetGamePlayerForCurrentTurn().UpdateTurnTime(progress);
-                await Task.Yield();
-            }
-
-            // If timer finished
-            if (IsMyTurn)
-            {
-                onTurnTimeEnded?.Invoke();
-            }
-        }
-        catch (OperationCanceledException)
-        {
-            Logger.Log("Turn timer stopped");
-        }
-        catch (Exception e)
-        {
-            Logger.Error(e.Message);
-            throw;
-        }
+        GetGamePlayerForCurrentTurn().UpdateTurnTime(progress);
     }
-    
-    public async Task StartExplodePuttingBackTimerAsync(CancellationToken token, Action onTimerEndedAction)
+
+    private void OnTimerComplete()
     {
-        double turnEndTime = PhotonNetworkController.GetPhotonTime() + PLACE_EXPLODE_BACK_DURATION;
-        Logger.Log($"{GetPhotonPlayerForCurrentTurn().NickName} Turn Starting at {PhotonNetworkController.GetPhotonTime()} and ending at {turnEndTime}");
-
-        try
+        if (IsMyTurn)
         {
-            while (PhotonNetworkController.GetPhotonTime() < turnEndTime)
-            {
-                token.ThrowIfCancellationRequested();
-
-                float remaining = (float)(turnEndTime - PhotonNetworkController.GetPhotonTime());
-                float progress = Mathf.Clamp01(remaining / PLACE_EXPLODE_BACK_DURATION);
-                GetGamePlayerForCurrentTurn().UpdateTurnTime(progress);
-                await Task.Yield();
-            }
-
-            // If timer finished
-            if (IsMyTurn)
-            {
-                onTimerEndedAction?.Invoke();
-            }
-        }
-        catch (OperationCanceledException)
-        {
-            Logger.Log("PLACE_EXPLODE_BACK timer stopped");
-        }
-        catch (Exception e)
-        {
-            Logger.Error(e.Message);
-            throw;
+            onTurnTimeEnded?.Invoke();
         }
     }
 }

@@ -116,4 +116,9 @@ public class DeckController : MonoBehaviour
     {
         return drawDeck.Count == 0;
     }
+
+    public int GetCount()
+    {
+        return drawDeck.Count;
+    }
 }

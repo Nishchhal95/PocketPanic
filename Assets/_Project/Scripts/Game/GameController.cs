@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Threading;
 using System.Threading.Tasks;
 using Photon.Pun;
 using Photon.Realtime;
@@ -29,6 +28,7 @@ public class GameController : MonoBehaviourPun
     private Dictionary<int, GamePlayer> actorIdToGamePlayerMap = new();
     private List<int> aliveActors;
 
+    private int GetLocalActorNumber() => PhotonNetworkController.GetLocalPlayer().ActorNumber;
     public TurnManager TurnManager { get; private set; }
     public bool SetupCompleted { get; private set; } = false;
     [field: SerializeField] public NetworkManager NetworkManager { get; private set; }
@@ -174,9 +174,34 @@ public class GameController : MonoBehaviourPun
     
     private async Task OnCardDrawAsync(int actorNumber, int count, bool top)
     {
-        // Instantly cancel the Turn timer because we draw a card.
-        TurnManager.StopTurnTimer();
+        // Instantly pause the Turn timer because we draw a card.
+        TurnManager.PauseTimer();
+
+        CardType[] cardsDrawn = await HandleCardDrawUIAsync(actorNumber, count, top);
+
+        if (!cardsDrawn.Contains(CardType.Explode))
+        {
+            // Only the Players whose turn it is can End Turn
+            if (actorNumber == GetLocalActorNumber())
+            {
+                NetworkManager.SendEndTurn();
+            }
+            return;
+        }
         
+        for (int i = 0; i < cardsDrawn.Length; i++)
+        {
+            CardType drawnCard = cardsDrawn[i];
+            if (drawnCard == CardType.Explode)
+            {
+                Logger.Log($"{actorIdToPhotonPlayerMap[actorNumber].NickName} draws Explode!");
+                await HandleExplodingDrawnAsync(actorNumber);
+            }
+        }
+    }
+
+    private async Task<CardType[]> HandleCardDrawUIAsync(int actorNumber, int count, bool top)
+    { 
         /* So why do I do this (Why do I draw cards first and loop again to check if I draw an Explode?)
         This is because there could be a case when I draw 2 cards,
         1 could be Explode and the 2nd could be a Defuse,
@@ -187,45 +212,24 @@ public class GameController : MonoBehaviourPun
         {
             GamePlayer gamePlayer = actorIdToGamePlayerMap[actorNumber];
             Player photonPlayer = actorIdToPhotonPlayerMap[actorNumber];
+            bool isLocal = photonPlayer.IsLocal;
 
             CardType drawnCard = top ? deckController.DrawCardTop() : deckController.DrawCardBottom();
-            
-            CardController cardController = await CreateAndDealCardToPlayer(drawnCard, gamePlayer, 
-                photonPlayer.IsLocal);
+
+            CardController cardController = await CreateAndDealCardToPlayer(drawnCard, gamePlayer, isLocal);
             gamePlayer.AddCard(cardController);
-            
             cardsDrawn[i] = drawnCard;
-            
+
             if (count > 1)
             {
                 await Task.Delay(TimeSpan.FromSeconds(1f));
             }
         }
 
-        if (!cardsDrawn.Contains(CardType.Explode))
-        {
-            OnEndTurn();
-            return;
-        }
-        
-        for (int i = 0; i < cardsDrawn.Length; i++)
-        {
-            CardType drawnCard = cardsDrawn[i];
-            if (drawnCard == CardType.Explode)
-            {
-                Logger.Log($"{actorIdToPhotonPlayerMap[actorNumber].NickName} draws Explode!");
-                if (!TurnManager.IsMyTurn)
-                {
-                    return;
-                }
-                await HandleExplodingDrawnLocalAsync(actorNumber);
-            }
-        }
-        
-        NetworkManager.SendEndTurn();
+        return cardsDrawn;
     }
 
-    private async Task HandleExplodingDrawnLocalAsync(int actorNumber)
+    private async Task HandleExplodingDrawnAsync(int actorNumber)
     {
         GamePlayer gamePlayer = actorIdToGamePlayerMap[actorNumber];
         bool hasDefuse = gamePlayer.HasCard(CardType.Defuse);
@@ -236,23 +240,28 @@ public class GameController : MonoBehaviourPun
         {
             Logger.Log("Placing Explode back in the Deck");
             int explodeIndex = 1;
-            if (TurnManager.IsMyTurn)
+            if (actorNumber == GetLocalActorNumber())
             {
                 // Show some UI to put back Explode only to the player who got explode
-                // explodeIndex = await someUI();
+                gameCanvasController.ShowPlaceExplodeBackUI(deckController.GetCount(), 
+                    GameConfig.PUTTING_EXPLODE_BACK_TO_DECK_DURATION,
+                    index =>
+                    {
+                        NetworkManager.SendDefuseUsed(actorNumber, index);
+                        NetworkManager.SendEndTurn();
+                    });
             }
-            // // Start a Timer
-            // CancellationTokenSource cts = new CancellationTokenSource();
-            // await TurnManager.StartExplodePuttingBackTimerAsync(cts.Token, () =>
-            // {
-            //     NetworkManager.SendPlayerExploded(actorNumber);
-            // });
-            await Task.Delay(TimeSpan.FromSeconds(1f));
-            NetworkManager.SendDefuseUsed(actorNumber, explodeIndex);
+            else
+            {
+                // Maybe show other users some UI
+            }
         }
         else
         {
-            NetworkManager.SendPlayerExploded(actorNumber);
+            if (actorNumber == GetLocalActorNumber())
+            {
+                NetworkManager.SendPlayerExploded(actorNumber);
+            }
         }
     }
 
@@ -300,12 +309,14 @@ public class GameController : MonoBehaviourPun
 
     private void OnActionCardPlayed(int actorNumber, int cardTypeInt)
     {
+        TurnManager.RestartTimer();
+        
         // Locally we remove card by Instance GUID already
         if (actorNumber == PhotonNetworkController.GetLocalPlayer().ActorNumber)
         {
             return;
         }
-
+        
         _ = OnActionCardPlayedForRemotePlayer(actorNumber, cardTypeInt);
     }
 

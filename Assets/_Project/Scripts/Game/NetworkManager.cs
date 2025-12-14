@@ -1,5 +1,6 @@
 using System;
 using Photon.Pun;
+using UnityEngine;
 
 public class NetworkManager : MonoBehaviourPun
 {
@@ -17,7 +18,12 @@ public class NetworkManager : MonoBehaviourPun
     
     public void SendStartGame(int seed1, int seed2) => photonView.RPC(nameof(GameStartedRPC), RpcTarget.All, seed1, seed2);
     public void SendDrawCard(int actorNumber, int count, bool top) => photonView.RPC(nameof(DrawCardRPC), RpcTarget.All, actorNumber, count, top);
-    public void SendEndTurn() => photonView.RPC(nameof(EndTurnRPC), RpcTarget.All);
+
+    public void SendEndTurn()
+    {
+        Debug.Log("->>>>>>>>>SendEndTurn");
+        photonView.RPC(nameof(EndTurnRPC), RpcTarget.All);
+    }
     public void SendSetActorTurn(int actorNumber) => photonView.RPC(nameof(SetActorTurnRPC), RpcTarget.All, actorNumber);
     public void SendDefuseUsed(int actorNumber, int explodeIndex) => photonView.RPC(nameof(DefuseUsedRPC), RpcTarget.All, actorNumber, explodeIndex);
     public void SendPlayerExploded(int actorNumber) => photonView.RPC(nameof(PlayerExplodedRPC), RpcTarget.All, actorNumber);
