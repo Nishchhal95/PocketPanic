@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Photon.Pun;
 using Photon.Realtime;
 using UnityEngine;
+using Random = UnityEngine.Random;
 
 public class GameController : MonoBehaviourPun
 {
@@ -66,6 +67,7 @@ public class GameController : MonoBehaviourPun
         NetworkManager.OnRequestFavorCard += OnRequestFavorCard;
         NetworkManager.OnResponseFavorCard += OnResponseFavorCard;
         NetworkManager.OnAlterTheFutureCardsChanged += OnAlterTheFutureCardsChanged;
+        NetworkManager.OnStealCardWith2CardCombo += OnStealCardWith2CardCombo;
     }
 
     private void OnDisable()
@@ -83,6 +85,7 @@ public class GameController : MonoBehaviourPun
         NetworkManager.OnRequestFavorCard -= OnRequestFavorCard;
         NetworkManager.OnResponseFavorCard -= OnResponseFavorCard;
         NetworkManager.OnAlterTheFutureCardsChanged -= OnAlterTheFutureCardsChanged;
+        NetworkManager.OnStealCardWith2CardCombo -= OnStealCardWith2CardCombo;
 
         TurnManager?.Dispose();
     }
@@ -404,6 +407,28 @@ public class GameController : MonoBehaviourPun
         }
     }
 
+    private void OnStealCardWith2CardCombo(int from, int to, int cardType)
+    {
+        if (PhotonNetworkController.GetLocalPlayer().ActorNumber == to)
+        {
+            return;
+        }
+        _ = OnStealCardWith2CardComboAsync(from, to, cardType);
+    }
+
+    private async Task OnStealCardWith2CardComboAsync(int from, int to, int cardType)
+    {
+        Logger.Log($"OnStealCardWith2CardComboAsync {(CardType)cardType} " +
+                   $"from {actorIdToPhotonPlayerMap[from].NickName} to {actorIdToPhotonPlayerMap[to].NickName}");
+        GamePlayer fromGamePlayer = actorIdToGamePlayerMap[from];
+        GamePlayer toGamePlayer = actorIdToGamePlayerMap[to];
+
+        CardController addedCardController = await CreateAndDealCardFromPlayerToPlayer((CardType)cardType, 
+            fromGamePlayer, toGamePlayer, false);
+        fromGamePlayer.RemoveCard((CardType)cardType);
+        toGamePlayer.AddCard(addedCardController);
+    }
+
     #endregion
     
     private async Task SetupGame(int seedInitial, int seedFinal)
@@ -475,6 +500,16 @@ public class GameController : MonoBehaviourPun
             gamePlayer.CardContainer, gameCanvasController.DrawDeckTransform, isLocal);
         await CardAnimationController.AnimateCardToAnchored(currentCardController, 
             gamePlayer.HandLayoutManager.GetNextCardPosition(), 
+            GameConfig.ANIMATION_DEAL_CARD_DURATION);
+        return currentCardController;
+    }
+    
+    private async Task<CardController> CreateAndDealCardFromPlayerToPlayer(CardType cardType, GamePlayer from, GamePlayer to, bool isLocal)
+    {
+        CardController currentCardController = CreateCardController(cardType,
+            to.CardContainer, from.CardContainer, isLocal);
+        await CardAnimationController.AnimateCardToAnchored(currentCardController, 
+            to.HandLayoutManager.GetNextCardPosition(), 
             GameConfig.ANIMATION_DEAL_CARD_DURATION);
         return currentCardController;
     }
@@ -568,11 +603,44 @@ public class GameController : MonoBehaviourPun
     public async Task LocalPlayerPlaysCards(int actorNumber, List<(CardType, Guid)> playedCards, int targetActorNumber)
     {
         Logger.Log($"Cat Combo Play: {actorIdToPhotonPlayerMap[actorNumber].NickName} plays " +
-                   $"{playedCards[0].Item1} with {{playedCards.Count}} cards");
+                   $"{playedCards[0].Item1} with {playedCards.Count} cards");
         
-        targetActorNumber = await actorIdToGamePlayerMap[actorNumber].SelectTargetActorAsync();
+        GamePlayer currentGamePlayer = actorIdToGamePlayerMap[actorNumber];
+        Player currentPhotonPlayer = actorIdToPhotonPlayerMap[actorNumber];
         
-        // Cat Cards
+        Logger.Log($"Waiting for Selecting Target for {currentPhotonPlayer.NickName}");
+        targetActorNumber = await currentGamePlayer.SelectTargetActorAsync();
+        
+        GamePlayer targetGamePlayer = actorIdToGamePlayerMap[targetActorNumber];
+        Player targetPhotonPlayer = actorIdToPhotonPlayerMap[targetActorNumber];
+        
+        Logger.Log($"Target Selected is {targetActorNumber} and Name is {targetPhotonPlayer.NickName}");
+
+        if (playedCards.Count == 2)
+        {
+            // Can Pick a Card from the User
+            int randomCardIndex = Random.Range(0, targetGamePlayer.GetCardCount() - 1);
+            CardType cardType = targetGamePlayer.GetCard(randomCardIndex);
+            
+            foreach (var playedCard in playedCards)
+            {
+                CardController cardController = currentGamePlayer.GetCardController(playedCard.Item2);
+                await MoveCardToDiscardDeck(cardController);
+                currentGamePlayer.RemoveCard(playedCard.Item2);
+            }
+            
+            Logger.Log($"Stealing {cardType} card from {targetPhotonPlayer.NickName} to {currentPhotonPlayer.NickName}");
+            CardController addedCardController = await CreateAndDealCardFromPlayerToPlayer(cardType, 
+                targetGamePlayer, currentGamePlayer, true);
+            targetGamePlayer.RemoveCard(cardType);
+            currentGamePlayer.AddCard(addedCardController);
+            
+            NetworkManager.SendStealCardWith2CardCombo(targetActorNumber, actorNumber, (int)cardType);
+        }
+        else if (playedCards.Count == 3)
+        {
+            // Can Request any Card from the User.
+        }
     }
 
     #region CardActions Region

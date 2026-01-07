@@ -269,7 +269,9 @@ public class GamePlayer : MonoBehaviour
     
     private void OnPlayerSelectedClicked()
     {
+        Logger.Log($"Player Selected {actorNumber}");
         PlayerSelected?.Invoke(actorNumber);
+        Logger.Log($"Player Selected AFTER {actorNumber}");
     }
 
     private void OnTargetActorSelected(int targetActor)
@@ -282,7 +284,7 @@ public class GamePlayer : MonoBehaviour
         GameController.Instance.HideTargetSelection();
         isSelectingTarget = false;
         
-        selectionTask.SetResult(actorNumber);
+        selectionTask.SetResult(targetActor);
     }
 
     private void OnPlayClicked()
@@ -493,5 +495,10 @@ public class GamePlayer : MonoBehaviour
     public void EndTurn()
     {
         turnFillImage.gameObject.SetActive(false);
+    }
+
+    public int GetCardCount()
+    {
+        return cards.Count;
     }
 }
