@@ -24,11 +24,10 @@ public class DeckController : MonoBehaviour
         }
     }
     
-    public void AddExplode(int playerCount)
+    public void AddExplode(int count)
     {
-        int explodingCards = playerCount - 1;
         DeckConfig.CardEntry cardEntry = deckConfig.cards.Find(x => x.type == CardType.Explode);
-        for (int i = 0; i < explodingCards; i++)
+        for (int i = 0; i < count; i++)
         {
             drawDeck.Add(cardEntry.type);
         }
