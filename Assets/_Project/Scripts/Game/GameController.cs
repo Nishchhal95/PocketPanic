@@ -31,7 +31,7 @@ public class GameController : MonoBehaviourPun
 
     private int GetLocalActorNumber() => PhotonNetworkController.GetLocalPlayer().ActorNumber;
     public TurnManager TurnManager { get; private set; }
-    public bool SetupCompleted { get; private set; } = false;
+    public bool SetupCompleted { get; private set; }
     [field: SerializeField] public NetworkManager NetworkManager { get; private set; }
 
     private GamePlayer testPlayer;
@@ -39,6 +39,14 @@ public class GameController : MonoBehaviourPun
     [SerializeField] private CardType testRemoveCardType;
 
     private bool canSelectCard;
+
+    private List<CardType> forceTestCards = new()
+    {
+        // CardType.Defuse,
+        // CardType.Favor,
+        // CardType.BeardCat,
+        // CardType.BeardCat
+    };
     
     private void Awake()
     {
@@ -140,7 +148,8 @@ public class GameController : MonoBehaviourPun
     {
         testPlayer.RemoveCard(testRemoveCardType);
     }
-
+    
+    // Entry Point
     public void StartGameNetworked()
     {
         if (!PhotonNetworkController.IsMasterClient())
@@ -150,8 +159,8 @@ public class GameController : MonoBehaviourPun
         }
         
         // Generate and Shuffle Deck for all players
-        int randomSeedInitial = UnityEngine.Random.Range(1, 99999);
-        int randomSeedFinal = UnityEngine.Random.Range(1, 99999);
+        int randomSeedInitial = Random.Range(1, 99999);
+        int randomSeedFinal = Random.Range(1, 99999);
         
         NetworkManager.SendStartGame(randomSeedInitial, randomSeedFinal);
     }
@@ -344,52 +353,64 @@ public class GameController : MonoBehaviourPun
         deckController.Shuffle(shuffleSeed);
     }
 
-    private void OnRequestFavorCard(int from, int to)
+    private void OnRequestFavorCard(int favorRequester, int favorGiver)
     {
-        Logger.Log($"{actorIdToPhotonPlayerMap[from].NickName} " +
-                   $"requested a Favor from {actorIdToPhotonPlayerMap[to].NickName}");
+        Logger.Log($"{actorIdToPhotonPlayerMap[favorRequester].NickName} " +
+                   $"requested a Favor from {actorIdToPhotonPlayerMap[favorGiver].NickName}");
         
-        if (PhotonNetworkController.GetLocalPlayer().ActorNumber != to)
+        if (PhotonNetworkController.GetLocalPlayer().ActorNumber != favorGiver)
         {
             return;
         }
         
-        RequestingFavorCardAsync(from, to);
+        RequestingFavorCardFromFavorGiverAsync(favorRequester, favorGiver);
     }
 
-    private async void RequestingFavorCardAsync(int from, int to)
+    // Runs only on the Favor Giver Machine
+    private async void RequestingFavorCardFromFavorGiverAsync(int favorRequester, int favorGiver)
     {
         Logger.Log("Showing Favor Request UI...");
-        GamePlayer targetPlayer = actorIdToGamePlayerMap[to];
+        GamePlayer favorGiverGamePlayer = actorIdToGamePlayerMap[favorGiver];
+        (int, Guid, CardType) result = await favorGiverGamePlayer.RequestCardToGiveAsync();
+        
+        GamePlayer favorRequesterGamePlayer = actorIdToGamePlayerMap[favorRequester];
 
-        (int, Guid, CardType) result = await targetPlayer.RequestCardToGiveAsync();
-        GamePlayer fromGamePlayer = actorIdToGamePlayerMap[from];
-        GamePlayer toGamePlayer = actorIdToGamePlayerMap[to];
+        Player favorGiverPhotonPlayer = actorIdToPhotonPlayerMap[favorGiver];
+        Player favorRequesterPhotonPlayer = actorIdToPhotonPlayerMap[favorRequester];
+
+        Logger.Log($"Favor: Moving Card {result.Item3} from " +
+                   $"{favorGiverPhotonPlayer.NickName} to {favorRequesterPhotonPlayer.NickName}");
         
-        fromGamePlayer.RemoveCard(result.Item2);
-        toGamePlayer.AddCard(result.Item3);
+        // Is local here basically means if we need to show the face of card and what size should be of the card
+        // ideally I should check this -> PhotonNetworkController.GetLocalPlayer().ActorNumber == favorRequester
+        // but the comment above this functions tells that this will only run for the person who is giving the favor
+        // so that person should not be able to see the face at the END because now its the other persons card
+        await MoveCardFromPlayerToPlayer(result.Item2, favorGiverGamePlayer,
+            favorRequesterGamePlayer, false);
         
-        NetworkManager.SendResponseFavorCard(to, from, (int)result.Item3);
+        NetworkManager.SendResponseFavorCard(favorRequester, favorGiver, (int)result.Item3);
     }
-
-    private void OnResponseFavorCard(int from, int to, int cardTypeInt)
+    
+    // Runs only on everyone except Favor Giver Machine
+    private async void OnResponseFavorCard(int favorRequester, int favorGiver, int cardTypeInt)
     {
-        // We removed card locally for the player requesting favor from
-        if (PhotonNetworkController.GetLocalPlayer().ActorNumber == from)
+        // We removed card locally for the favor giver player
+        if (PhotonNetworkController.GetLocalPlayer().ActorNumber == favorGiver)
         {
             return;
         }
         
         CardType cardType = (CardType)cardTypeInt;
         
-        Logger.Log($"{actorIdToPhotonPlayerMap[from].NickName} " +
-                   $"responded with a {cardType.ToString()} card to {actorIdToPhotonPlayerMap[to].NickName}");
+        Logger.Log($"{actorIdToPhotonPlayerMap[favorGiver].NickName} " +
+                   $"responded with a {cardType.ToString()} card to {actorIdToPhotonPlayerMap[favorRequester].NickName}");
 
-        GamePlayer fromGamePlayer = actorIdToGamePlayerMap[from];
-        GamePlayer toGamePlayer = actorIdToGamePlayerMap[to];
+        GamePlayer favorGiverGamePlayer = actorIdToGamePlayerMap[favorGiver];
+        GamePlayer favorRequesterGamePlayer = actorIdToGamePlayerMap[favorRequester];
         
-        fromGamePlayer.RemoveCard(cardType);
-        toGamePlayer.AddCard(cardType);
+        // Is local here basically means if we need to show the face of card and what size should be of the card
+        await MoveCardFromPlayerToPlayer(cardType, favorGiverGamePlayer,
+            favorRequesterGamePlayer, PhotonNetworkController.GetLocalPlayer().ActorNumber == favorRequester);
     }
 
     private void OnAlterTheFutureCardsChanged(int actorNumber, int[] cards)
@@ -423,10 +444,7 @@ public class GameController : MonoBehaviourPun
         GamePlayer fromGamePlayer = actorIdToGamePlayerMap[from];
         GamePlayer toGamePlayer = actorIdToGamePlayerMap[to];
 
-        CardController addedCardController = await CreateAndDealCardFromPlayerToPlayer((CardType)cardType, 
-            fromGamePlayer, toGamePlayer, false);
-        fromGamePlayer.RemoveCard((CardType)cardType);
-        toGamePlayer.AddCard(addedCardController);
+        await MoveCardFromPlayerToPlayer((CardType)cardType, fromGamePlayer, toGamePlayer, false);
     }
 
     #endregion
@@ -439,12 +457,15 @@ public class GameController : MonoBehaviourPun
         SpawnPlayers();
         InitializeManagers();
         await DealCardsToPlayers();
+
+        int explodingCardCount = PhotonNetworkController.GetPlayerCountInCurrentRoom() - 1;
+        int defuseCount = 2;
+        deckController.AddExplode(explodingCardCount);
+        deckController.AddDefuse(defuseCount);
         
-        deckController.AddExplode(PhotonNetworkController.GetPlayerCountInCurrentRoom());
-        deckController.AddDefuse(2);
         deckController.Shuffle(seedFinal);
         
-        deckController.InsertCardAtIndex(CardType.Explode);
+        //deckController.InsertCardAtIndex(CardType.Explode);
         
         TurnManager.EndTurn();
         SetupCompleted = true;
@@ -481,15 +502,27 @@ public class GameController : MonoBehaviourPun
         {
             GamePlayer currentPlayer = actorIdToGamePlayerMap[player.ActorNumber];
             Player photonPlayer = actorIdToPhotonPlayerMap[player.ActorNumber];
-            
-            // Adding first as Defuse and then the rest of the cards
-            for (int j = 0; j < 8; j++)
-            {
-                CardType currentCard = j == 0 ? CardType.Defuse : deckController.DrawCardTop();
 
-                CardController cardController = await CreateAndDealCardToPlayer(currentCard, currentPlayer, 
-                    photonPlayer.IsLocal);
-                currentPlayer.AddCard(cardController);
+            if (forceTestCards is not null && forceTestCards.Count > 0)
+            {
+                foreach (CardType currentCard in forceTestCards)
+                {
+                    CardController cardController = await CreateAndDealCardToPlayer(currentCard, currentPlayer, 
+                        photonPlayer.IsLocal);
+                    currentPlayer.AddCard(cardController);
+                }
+            }
+            else
+            {
+                // Adding first as Defuse and then the rest of the cards
+                for (int i = 0; i < 8; i++)
+                {
+                    CardType currentCard = i == 0 ? CardType.Defuse : deckController.DrawCardTop();
+                
+                    CardController cardController = await CreateAndDealCardToPlayer(currentCard, currentPlayer, 
+                        photonPlayer.IsLocal);
+                    currentPlayer.AddCard(cardController);
+                }
             }
         }
     }
@@ -629,11 +662,8 @@ public class GameController : MonoBehaviourPun
                 currentGamePlayer.RemoveCard(playedCard.Item2);
             }
             
-            Logger.Log($"Stealing {cardType} card from {targetPhotonPlayer.NickName} to {currentPhotonPlayer.NickName}");
-            CardController addedCardController = await CreateAndDealCardFromPlayerToPlayer(cardType, 
-                targetGamePlayer, currentGamePlayer, true);
-            targetGamePlayer.RemoveCard(cardType);
-            currentGamePlayer.AddCard(addedCardController);
+            Logger.Log($"{currentPhotonPlayer.NickName} is stealing {cardType} card from {targetPhotonPlayer.NickName}");
+            await MoveCardFromPlayerToPlayer(cardType, targetGamePlayer, currentGamePlayer, true);
             
             NetworkManager.SendStealCardWith2CardCombo(targetActorNumber, actorNumber, (int)cardType);
         }
@@ -797,5 +827,33 @@ public class GameController : MonoBehaviourPun
         
         cardController.RectTransform.SetParent(gameCanvasController.DrawDeckTransform);
         cardController.RectTransform.localPosition = Vector3.zero;
+    }
+
+    private async Task<CardController> MoveCardFromPlayerToPlayer(Guid cardInstanceId, GamePlayer from, GamePlayer to, bool isLocal)
+    {
+        return await MoveCardFromPlayerToPlayer(from.GetCardController(cardInstanceId), from, to, isLocal);
+    }
+    
+    private async Task<CardController> MoveCardFromPlayerToPlayer(CardType cardType, GamePlayer from, GamePlayer to, bool isLocal)
+    {
+        return await MoveCardFromPlayerToPlayer(from.GetCardController(cardType), from, to, isLocal);
+    }
+
+    private async Task<CardController> MoveCardFromPlayerToPlayer(CardController oldCardController, GamePlayer from, GamePlayer to, bool isLocal)
+    {
+        // TODO: Maybe we should find a way to move the existing cards and not create new everytime!
+        CardController cardController = CreateCardController(oldCardController.CardType, 
+            to.CardContainer.transform, from.CardContainer.transform, isLocal);
+        
+        await CardAnimationController.AnimateCardToAnchored(cardController, 
+            to.HandLayoutManager.GetNextCardPosition(), 
+            GameConfig.ANIMATION_DEAL_CARD_DURATION);
+        
+        from.RemoveCard(oldCardController.CardInstanceLocal);
+        Destroy(oldCardController.gameObject);
+        
+        to.AddCard(cardController);
+        
+        return cardController;
     }
 }
