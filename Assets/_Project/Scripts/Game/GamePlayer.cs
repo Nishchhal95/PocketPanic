@@ -13,6 +13,7 @@ public class GamePlayer : MonoBehaviour
     
     [field: SerializeField] public Transform CardContainer { get; private set; }
     [field: SerializeField] public HandLayoutManager HandLayoutManager { get; private set; }
+    [field: SerializeField] public bool IsLocal { get; private set; }
     
     [SerializeField] private TMP_Text playerNameTextField;
     [SerializeField] private Button playCardButton;
@@ -23,17 +24,10 @@ public class GamePlayer : MonoBehaviour
     [SerializeField] private int actorNumber;
     [SerializeField] private string userId;
 
-    [SerializeField] private float localPlayerCardWidth;
-    [SerializeField] private float localPlayerCardHeight;
-    
-    [SerializeField] private float remotePlayerCardWidth;
-    [SerializeField] private float remotePlayerCardHeight;
-
     [SerializeField] private bool showCards;
     
 
     private bool initializedCards;
-    private bool isLocal;
     private List<CardType> cards = new();
     private List<CardController> cardControllers = new();
 
@@ -97,9 +91,9 @@ public class GamePlayer : MonoBehaviour
         playerNameTextField.SetText(playerName);
         this.actorNumber = actorNumber;
         this.userId = userId;
-        this.isLocal = isLocal;
+        IsLocal = isLocal;
 
-        if (this.isLocal)
+        if (IsLocal)
         {
             LocalSetup();
         }
@@ -144,8 +138,10 @@ public class GamePlayer : MonoBehaviour
     
     public void AddCard(CardController cardController)
     {
+        cardController.OnClick += OnCardClicked;
+        
         cards.Add(cardController.CardType);
-        AddCardVisual(cardController);
+        cardControllers.Add(cardController);
         
         DeselectSelectedCards();
         HandLayoutManager.UpdateHandLayout();
@@ -231,38 +227,16 @@ public class GamePlayer : MonoBehaviour
     {
         CardData cardData = CardDatabase.Instance.Get(cardType);
         CardController cardController = Instantiate(cardPrefab, CardContainer);
-        RectTransform cardRectTransform = cardController.GetComponent<RectTransform>();
-        if (isLocal)
+        if (IsLocal)
         {
-            cardRectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, localPlayerCardHeight);
-            cardRectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, localPlayerCardWidth);
+            cardController.SetCardSizeFull();
         }
         else
         {
-            cardRectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, remotePlayerCardHeight);
-            cardRectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, remotePlayerCardWidth);
+            cardController.SetCardSizeSmall();
         }
         
-        cardController.Init(new CardRuntimeData(cardType, Guid.NewGuid(), cardData.artwork, backFace, 
-            isLocal, localPlayerCardWidth, localPlayerCardHeight, remotePlayerCardWidth, remotePlayerCardHeight));
-        cardController.OnClick += OnCardClicked;
-        cardControllers.Add(cardController);
-    }
-    
-    private void AddCardVisual(CardController cardController)
-    {
-        RectTransform cardRectTransform = cardController.GetComponent<RectTransform>();
-        if (isLocal)
-        {
-            cardRectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, localPlayerCardHeight);
-            cardRectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, localPlayerCardWidth);
-        }
-        else
-        {
-            cardRectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, remotePlayerCardHeight);
-            cardRectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, remotePlayerCardWidth);
-        }
-        
+        cardController.Init(new CardRuntimeData(cardType, Guid.NewGuid(), cardData.artwork, IsLocal));
         cardController.OnClick += OnCardClicked;
         cardControllers.Add(cardController);
     }
@@ -301,18 +275,17 @@ public class GamePlayer : MonoBehaviour
 
     private void HandleCardPlayed()
     {
-        int targetActorNumber = -1;
         if (selectedCards.Count == 1)
         {
             CardType playedCardType = selectedCards[0].CardType;
             _ = GameController.Instance.LocalPlayerPlaysCard(actorNumber, playedCardType, 
-                selectedCards[0].CardInstanceLocal, targetActorNumber);
+                selectedCards[0].CardInstanceLocal);
         }
         else
         {
             List<(CardType, Guid)> tupleList = selectedCards.Select(cardController => 
                 (cardController.CardType, cardController.CardInstanceLocal)).ToList();
-            _ = GameController.Instance.LocalPlayerPlaysCards(actorNumber, tupleList, targetActorNumber);
+            _ = GameController.Instance.LocalPlayerPlaysCards(actorNumber, tupleList);
         }
     }
 
@@ -435,7 +408,7 @@ public class GamePlayer : MonoBehaviour
     
     private void UpdatePlayButtonState()
     {
-        if (!isLocal)
+        if (!IsLocal)
         {
             return;
         }

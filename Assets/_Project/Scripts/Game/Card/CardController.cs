@@ -11,19 +11,13 @@ public class CardController : MonoBehaviour, IPointerEnterHandler, IPointerExitH
     [field: SerializeField] public Guid CardInstanceLocal { get; private set; }
     [field: SerializeField] public RectTransform RectTransform { get; private set; }
     [field: SerializeField] public Vector2 OriginalPos { get; private set; }
+    [field: SerializeField] public CardFace CardFace { get; private set; }
     
     [SerializeField] private float hoverMoveDistance = 100f;
     [SerializeField] private Vector3 selectedScale = new(1.2f, 1.2f, 1.2f);
     [SerializeField] private float tweenDuration = 0.25f;
 
     [SerializeField] private Sprite faceUpSprite;
-    [SerializeField] private Sprite faceDownSprite;
-
-    private float fullCardWidth;
-    private float fullCardHeight;
-    
-    private float smallCardWidth;
-    private float smallCardHeight;
 
     public event Action<Guid, CardType> OnClick;
     private bool isSelected;
@@ -34,38 +28,38 @@ public class CardController : MonoBehaviour, IPointerEnterHandler, IPointerExitH
         CardType = cardRuntimeData.CardType;
         CardInstanceLocal = cardRuntimeData.CardLocalGuid;
         faceUpSprite = cardRuntimeData.FaceUpSprite;
-        faceDownSprite = cardRuntimeData.FaceDownSprite;
         isLocal = cardRuntimeData.IsLocal;
 
-        fullCardWidth = cardRuntimeData.FullCardWidth;
-        fullCardHeight = cardRuntimeData.FullCardHeight;
-        
-        smallCardWidth = cardRuntimeData.SmallCardWidth;
-        smallCardHeight = cardRuntimeData.SmallCardHeight;
+        FaceDown();
+    }
 
-        image.sprite = isLocal ? faceUpSprite : faceDownSprite;
+    public void ChangeOwnerShip(bool isLocal)
+    {
+        this.isLocal = isLocal;
     }
 
     public void FaceUp()
     {
         image.sprite = faceUpSprite;
+        CardFace = CardFace.UP;
     }
 
     public void FaceDown()
     {
-        image.sprite = faceDownSprite;
+        image.sprite = CardRuntimeData.FaceDownSprite;
+        CardFace = CardFace.DOWN;
     }
 
     public void SetCardSizeFull()
     {
-        RectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, fullCardHeight);
-        RectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, fullCardWidth);
+        RectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, CardRuntimeData.FullCardHeight);
+        RectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, CardRuntimeData.FullCardWidth);
     }
 
     public void SetCardSizeSmall()
     {
-        RectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, smallCardHeight);
-        RectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, smallCardWidth);
+        RectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, CardRuntimeData.SmallCardHeight);
+        RectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, CardRuntimeData.SmallCardWidth);
     }
     
     public void OnPointerEnter(PointerEventData eventData)
@@ -129,27 +123,28 @@ public class CardController : MonoBehaviour, IPointerEnterHandler, IPointerExitH
 
 public class CardRuntimeData
 {
+    public static float FullCardWidth;
+    public static float FullCardHeight;
+    public static float SmallCardWidth;
+    public static float SmallCardHeight;
+    public static Sprite FaceDownSprite;
+    
     public CardType CardType;
     public Guid CardLocalGuid;
     public Sprite FaceUpSprite;
-    public Sprite FaceDownSprite;
     public bool IsLocal;
-    public float FullCardWidth;
-    public float FullCardHeight;
-    public float SmallCardWidth;
-    public float SmallCardHeight;
 
-    public CardRuntimeData(CardType cardType, Guid cardLocalGuid, Sprite faceUpSprite, Sprite faceDownSprite, 
-        bool isLocal, float fullCardWidth, float fullCardHeight, float smallCardWidth, float smallCardHeight)
+    public CardRuntimeData(CardType cardType, Guid cardLocalGuid, Sprite faceUpSprite, bool isLocal)
     {
         CardType = cardType;
         CardLocalGuid = cardLocalGuid;
         FaceUpSprite = faceUpSprite;
-        FaceDownSprite = faceDownSprite;
         IsLocal = isLocal;
-        FullCardWidth = fullCardWidth;
-        FullCardHeight = fullCardHeight;
-        SmallCardWidth = smallCardWidth;
-        SmallCardHeight = smallCardHeight;
     }
+}
+
+public enum CardFace
+{
+    UP = 1,
+    DOWN = 2
 }
