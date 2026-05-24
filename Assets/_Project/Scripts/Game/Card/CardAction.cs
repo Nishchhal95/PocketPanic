@@ -97,7 +97,7 @@ public class FavorAction : CardAction
     public override void Execute(int actorNumber, int targetActorNumber = -1)
     {
         Logger.Log($"Player {actorNumber} played FAVOR!");
-        GameController.Instance.RequestCardFromPlayer(actorNumber, actorNumber + 1, 1);
+        GameController.Instance.RequestCardFromPlayer(actorNumber, targetActorNumber);
     }
 }
 

@@ -758,7 +758,7 @@ public class GameController : MonoBehaviourPun
         });
     }
     
-    public void RequestCardFromPlayer(int requestingActorNumber, int targetActorNumber, int cardIndex)
+    public void RequestCardFromPlayer(int requestingActorNumber, int targetActorNumber)
     {
         // Wraps it so it starts from 1 till player count, NOT FROM 0
         targetActorNumber = (targetActorNumber - 1) % actorIdToGamePlayerMap.Count + 1;
